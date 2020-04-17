@@ -6,10 +6,10 @@ import shap
 
 class BorutaShap:
 
-    def __init__(self, model=None, Shap=True):
+    def __init__(self, model=None, Shap=True, model_type = 'tree'):
 
         self.Shap = Shap
-        self.model = model
+        self.model_type = model_type
         self.check_model()
 
 
@@ -25,7 +25,7 @@ class BorutaShap:
             raise AttributeError('Model must contain both the fit() and predict_proba() methods')
 
         else:
-            pass
+            self.model = model
 
 
     def check_X(self):
@@ -33,7 +33,19 @@ class BorutaShap:
         if isinstance(self.X, pd.DataFrame) is False:
             raise AttributeError('X must be a pandas Dataframe')
         else:
-            pass 
+            pass
+
+
+    def check_missing_values(self):
+
+        X_missing = self.X.isnull().any().any()
+        Y_missing = self.y.isnull().any().any()
+
+        if X_missing or Y_missing:
+            raise ValueError('There are missing values in your Data')
+        
+        else:
+            pass
 
 
     def fit(self, X, y, n_trials = 20):
@@ -42,6 +54,7 @@ class BorutaShap:
         self.y = y
         
         self.check_X()
+        self.check_missing_values()
         self.create_shadow_features()
         self.model.fit(self.X_boruta, self.y)
         X_feature_import, Shadow_feature_import = self.feature_importance()
@@ -75,8 +88,11 @@ class BorutaShap:
 
 
     def explainer(self):
-        explainer = shap.TreeExplainer(self.model)
-        self.shap_values = explainer.shap_values(self.x_boruta)
+
+        if self.model_type == 'tree':
+            explainer = shap.TreeExplainer(self.model)
+            self.shap_values = explainer.shap_values(self.x_boruta)
+        elif
         
 
 
