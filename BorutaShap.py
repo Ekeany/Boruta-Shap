@@ -1,4 +1,6 @@
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
+from sklearn.inspection import permutation_importance
+from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import shap
@@ -9,9 +11,11 @@ warnings.filterwarnings("ignore")
 
 class BorutaShap:
 
-    def __init__(self, model=None, Shap=True, model_type = 'tree', classification = True):
+    def __init__(self, model=None, importance_measure='Shap', model_type = 'tree',
+                classification = True, percentile = 100):
         
-        self.Shap = Shap
+        self.importance_measure = importance_measure.lower()
+        self.percentile = percentile
         self.classification = classification
         self.model = model
         self.model_type = model_type
@@ -55,7 +59,7 @@ class BorutaShap:
         
         else:
             pass
-
+    
 
     def fit(self, X, y, n_trials = 20):
         
@@ -66,11 +70,16 @@ class BorutaShap:
         self.check_missing_values()
         self.create_shadow_features()
         self.model.fit(self.X_boruta, self.y)
-        X_feature_import, Shadow_feature_import = self.feature_importance()
-        print(X_feature_import > Shadow_feature_import.max())
+        self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
+        return self.calculate_hits()
 
 
-    
+    def calculate_hits(self):
+        shadow_threshold = np.percentile(self.Shadow_feature_import,
+                                        self.percentile)
+        return self.X_feature_import > shadow_threshold
+
+
     def create_shadow_features(self):
 
             self.X_shadow = self.X.apply(np.random.permutation)
@@ -78,18 +87,31 @@ class BorutaShap:
             self.X_boruta = pd.concat([self.X, self.X_shadow], axis = 1)
 
 
+    @staticmethod
+    def calculate_Zscore(array):
+        return [(element - np.mean(array)/np.std(array)) for element in array]
+
+
     def feature_importance(self):
 
-        if self.Shap:
+        if self.importance_measure == 'shap':
 
             self.explain()
             vals = np.abs(self.shap_values).mean(0)
 
+            vals = self.calculate_Zscore(vals)
             X_feature_import = vals[:len(self.X.columns)]
             Shadow_feature_import = vals[len(self.X_shadow.columns):]
 
-        else:
+        elif self.importance_measure == 'permutation':
 
+            permuation_importnace_ = permutation_importance(estimator=self.model, X=self.X_boruta, y=self.y)
+            permuation_importnace_ = self.calculate_Zscore(permuation_importnace_.importances_mean)
+            X_feature_import = permuation_importnace_[:len(self.X.columns)]
+            Shadow_feature_import = permuation_importnace_[len(self.X.columns):]
+            
+        else:
+            
             X_feature_import = self.model.feature_importances_[:len(self.X.columns)]
             Shadow_feature_import = self.model.feature_importances_[len(self.X.columns):]
 
@@ -113,21 +135,64 @@ class BorutaShap:
 
         else:
             raise AttributeError("Model Type has not been Selected (linear or tree)")
-            
 
+
+def averageOfList(numOfList):
+       avg = sum(numOfList) / len(numOfList)
+       return avg
 
 if __name__ == "__main__":
     
-    np.random.seed(56)
     current_directory = os.getcwd()
 
     X = pd.read_csv(current_directory + '\\Datasets\\Ozone.csv')
     y = X.pop('V4')
 
-    feature_selector = BorutaShap(Shap=False, classification=False)
-    feature_selector.fit(X, y)
+    hits_natty = np.zeros((len(X.columns)))
+    hits_shap   = np.zeros((len(X.columns)))
 
-    feature_selector = BorutaShap(Shap=True, classification=False)
-    feature_selector.fit(X, y)
+    history_shap_shadow = np.zeros(len(X.columns))
+    history_shap_x = np.zeros(len(X.columns))
+
+    history_shadow = np.zeros(len(X.columns))
+    history_x = np.zeros(len(X.columns))
+    for trial in tqdm(range(20)):
+
+        np.random.seed(trial+1)
+        
+        feature_selector = BorutaShap(importance_measure='permutation',
+                                      classification=False)
+        hits_natty += feature_selector.fit(X, y)
+
+        history_shadow = np.vstack((history_shadow, feature_selector.Shadow_feature_import))
+        history_x = np.vstack((history_x, feature_selector.X_feature_import))
+
+        
+        feature_selector = BorutaShap(importance_measure='Shap',
+                                      classification=False)
+        hits_shap += feature_selector.fit(X, y)
+
+        history_shap_shadow = np.vstack((history_shap_shadow, feature_selector.Shadow_feature_import))
+        history_shap_x = np.vstack((history_shap_x, feature_selector.X_feature_import))
+
+   
+
+    history_x = pd.DataFrame(data=history_x,
+                            columns=X.columns)
+    history_x['Max_Shadow'] =  [max(i) for i in history_shadow]
+    history_x['Min_Shadow'] =  [min(i) for i in history_shadow]
+    history_x['Mean_Shadow'] =  [averageOfList(i) for i in history_shadow]
+    history_x.iloc[1:].to_csv('features_ozone.csv', index=False)
+
+    history_shap_x = pd.DataFrame(data=history_shap_x,
+                                columns=X.columns)
+    history_shap_x['Max_Shadow'] =  [max(i) for i in history_shap_shadow]
+    history_shap_x['Min_Shadow'] =  [min(i) for i in history_shap_shadow]
+    history_shap_x['Mean_Shadow'] =  [averageOfList(i) for i in history_shap_shadow]
+    history_shap_x.iloc[1:].to_csv('Shap_features_ozone.csv', index=False)
+
+    print(hits_natty)
+    print(hits_shap)
+
 
 
