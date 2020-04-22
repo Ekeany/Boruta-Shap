@@ -1,5 +1,7 @@
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.inspection import permutation_importance
+from statsmodels.stats.multitest import multipletests
+from scipy.stats import binom_test
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
@@ -12,10 +14,11 @@ warnings.filterwarnings("ignore")
 class BorutaShap:
 
     def __init__(self, model=None, importance_measure='Shap', model_type = 'tree',
-                classification = True, percentile = 100):
+                classification = True, percentile = 100, pvalue=0.05):
         
         self.importance_measure = importance_measure.lower()
         self.percentile = percentile
+        self.pvalue = pvalue
         self.classification = classification
         self.model = model
         self.model_type = model_type
@@ -135,6 +138,44 @@ class BorutaShap:
 
         else:
             raise AttributeError("Model Type has not been Selected (linear or tree)")
+
+
+    @staticmethod
+    def binomial_H0_test(array, n, p, alternative):
+        return [binom_test(x, n=n, p=p, alternative=alternative) for x in array]
+
+    
+    def test_features(self, hits, iteration):
+
+        acceptance_p_values = self.binomial_H0_test(hits,
+                                                    n=iteration,
+                                                    p=0.5,
+                                                    alternative='greater')
+        regect_p_values = self.binomial_H0_test(hits,
+                                                n=iteration,
+                                                p=0.5,
+                                                alternative='less')
+        
+        modified_acceptance_p_values = multipletests(acceptance_p_values,
+                                                    alpha=0.05,
+                                                    method='bonferroni')
+
+        modified_regect_p_values = multipletests(regect_p_values,
+                                                alpha=0.05,
+                                                method='bonferroni')
+
+        np.array(modified_regect_p_values) < self.pvalue
+        np.array(acceptance_p_values) < self.pvalue
+
+        
+
+        
+
+        
+
+
+
+        
 
 
 def averageOfList(numOfList):
