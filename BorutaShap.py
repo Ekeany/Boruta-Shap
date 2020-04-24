@@ -81,27 +81,70 @@ class BorutaShap:
         self.X = X
         self.y = y
         self.n_trials = n_trials
-        self.columns = X.columns.to_numpy()
+        self.ncols = self.X.shape[1]
+        self.all_columns = self.X.columns.to_numpy()
+        self.rejected_columns = []
+        self.accepted_columns = []
+        
         self.check_X()
         self.check_missing_values()
 
-        self.hits = np.zeros(self.X.shape[1])
+        self.features_to_remove = []
+        self.hits  = np.zeros(self.ncols)
+        self.order = self.create_mapping_between_cols_and_indices()
         for trial in tqdm(range(self.n_trials)):
-
+            
+            #self.remove_features_if_rejected_or_accepted()
+            self.columns = self.X.columns.to_numpy()
             self.create_shadow_features()
-            self.model.fit(self.X_boruta, self.y)
-            self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
-            self.hits += self.calculate_hits()
 
-        self.test_features(iteration=self.n_trials)
+            if self.X.shape[1] == 0:
+                break
+
+            else:
+                self.model.fit(self.X_boruta, self.y)
+                self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
+                self.hits += self.calculate_hits()
+                self.test_features(iteration=trial+1)
+
+
+        print(set(self.flatten_list(self.rejected_columns)))
+        print(set(self.flatten_list(self.accepted_columns)))
+    
+
+    def remove_features_if_rejected_or_accepted(self):
+
+        if len(self.features_to_remove) != 0:
+            for feature in self.features_to_remove:
+                try:
+                    self.X.drop(feature, axis = 1, inplace=True)
+                except:
+                    pass
         
+        else:
+            pass
+    
+
+    @staticmethod
+    def flatten_list(array):
+        return [item for sublist in array for item in sublist]
+
+    def create_mapping_between_cols_and_indices(self):
+        return dict(zip(self.X.columns.to_list(), np.arange(self.X.shape[1])))
 
 
     def calculate_hits(self):
         shadow_threshold = np.percentile(self.Shadow_feature_import,
                                         self.percentile)
- 
-        return self.X_feature_import > shadow_threshold
+        
+        padded_hits = np.zeros(self.ncols)
+        hits = self.X_feature_import > shadow_threshold
+
+        for (index, col) in enumerate(self.columns):
+            map_index = self.order[col]
+            padded_hits[map_index] += hits[index]
+
+        return padded_hits
 
 
     def create_shadow_features(self):
@@ -197,15 +240,19 @@ class BorutaShap:
         rejected_columns = np.array(modified_regect_p_values) < self.pvalue
         accepted_columns = np.array(modified_acceptance_p_values) < self.pvalue
 
-        rejected_features = self.columns[self.find_index_of_true_in_array(rejected_columns)]
-        accepted_features = self.columns[self.find_index_of_true_in_array(accepted_columns)]
+        rejected_indices = self.find_index_of_true_in_array(rejected_columns)
+        accepted_indices = self.find_index_of_true_in_array(accepted_columns)
 
-        print(rejected_features)
-        print(accepted_features)
+        rejected_features = self.all_columns[rejected_indices]
+        accepted_features = self.all_columns[accepted_indices]
 
-        
+        self.features_to_remove = np.concatenate([rejected_features,
+                                                  accepted_features])
 
-        
+        self.rejected_columns.append(rejected_features)
+        self.accepted_columns.append(accepted_features)
+
+
 
 if __name__ == "__main__":
     
@@ -215,7 +262,7 @@ if __name__ == "__main__":
     y = X.pop('V4')
 
     Feature_Selector = BorutaShap(model=None, importance_measure='permutation', model_type='tree',
-              classification=False, percentile=80, pvalue=0.05)
+              classification=False, percentile=100, pvalue=0.05)
 
     Feature_Selector.fit(X,y)
 
