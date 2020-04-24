@@ -11,10 +11,22 @@ import os
 import warnings
 warnings.filterwarnings("ignore")
 
+
+"""
+todo 
+check all features vrs removing rejected and accepted features
+remove z scores
+create and way to store all of the shap scores 
+
+"""
+
+
+
+
 class BorutaShap:
 
-    def __init__(self, model=None, importance_measure='Shap', model_type = 'tree',
-                classification = True, percentile = 100, pvalue=0.05):
+    def __init__(self, model=None, importance_measure='Shap', model_type='tree',
+                classification=True, percentile=100, pvalue=0.05):
         
         self.importance_measure = importance_measure.lower()
         self.percentile = percentile
@@ -68,18 +80,27 @@ class BorutaShap:
         
         self.X = X
         self.y = y
-        
+        self.n_trials = n_trials
+        self.columns = X.columns.to_numpy()
         self.check_X()
         self.check_missing_values()
-        self.create_shadow_features()
-        self.model.fit(self.X_boruta, self.y)
-        self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
-        return self.calculate_hits()
+
+        self.hits = np.zeros(self.X.shape[1])
+        for trial in tqdm(range(self.n_trials)):
+
+            self.create_shadow_features()
+            self.model.fit(self.X_boruta, self.y)
+            self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
+            self.hits += self.calculate_hits()
+
+        self.test_features(iteration=self.n_trials)
+        
 
 
     def calculate_hits(self):
         shadow_threshold = np.percentile(self.Shadow_feature_import,
                                         self.percentile)
+ 
         return self.X_feature_import > shadow_threshold
 
 
@@ -144,43 +165,47 @@ class BorutaShap:
     def binomial_H0_test(array, n, p, alternative):
         return [binom_test(x, n=n, p=p, alternative=alternative) for x in array]
 
-    
-    def test_features(self, hits, iteration):
 
-        acceptance_p_values = self.binomial_H0_test(hits,
+    @staticmethod
+    def find_index_of_true_in_array(array):
+        length = len(array)
+        return list(filter(lambda x: array[x], range(length)))
+    
+
+    def test_features(self, iteration):
+
+        acceptance_p_values = self.binomial_H0_test(self.hits,
                                                     n=iteration,
                                                     p=0.5,
                                                     alternative='greater')
-        regect_p_values = self.binomial_H0_test(hits,
+                                                    
+        regect_p_values = self.binomial_H0_test(self.hits,
                                                 n=iteration,
                                                 p=0.5,
                                                 alternative='less')
         
+        # [1] as function returns a tuple 
         modified_acceptance_p_values = multipletests(acceptance_p_values,
                                                     alpha=0.05,
-                                                    method='bonferroni')
+                                                    method='bonferroni')[1]
 
         modified_regect_p_values = multipletests(regect_p_values,
                                                 alpha=0.05,
-                                                method='bonferroni')
+                                                method='bonferroni')[1]
 
-        np.array(modified_regect_p_values) < self.pvalue
-        np.array(acceptance_p_values) < self.pvalue
+        # Take the inverse as we want true to keep featrues
+        rejected_columns = np.array(modified_regect_p_values) < self.pvalue
+        accepted_columns = np.array(modified_acceptance_p_values) < self.pvalue
+
+        rejected_features = self.columns[self.find_index_of_true_in_array(rejected_columns)]
+        accepted_features = self.columns[self.find_index_of_true_in_array(accepted_columns)]
+
+        print(rejected_features)
+        print(accepted_features)
 
         
 
         
-
-        
-
-
-
-        
-
-
-def averageOfList(numOfList):
-       avg = sum(numOfList) / len(numOfList)
-       return avg
 
 if __name__ == "__main__":
     
@@ -189,51 +214,14 @@ if __name__ == "__main__":
     X = pd.read_csv(current_directory + '\\Datasets\\Ozone.csv')
     y = X.pop('V4')
 
-    hits_natty = np.zeros((len(X.columns)))
-    hits_shap   = np.zeros((len(X.columns)))
+    Feature_Selector = BorutaShap(model=None, importance_measure='permutation', model_type='tree',
+              classification=False, percentile=80, pvalue=0.05)
 
-    history_shap_shadow = np.zeros(len(X.columns))
-    history_shap_x = np.zeros(len(X.columns))
+    Feature_Selector.fit(X,y)
 
-    history_shadow = np.zeros(len(X.columns))
-    history_x = np.zeros(len(X.columns))
-    for trial in tqdm(range(20)):
+    print(Feature_Selector.hits)
 
-        np.random.seed(trial+1)
-        
-        feature_selector = BorutaShap(importance_measure='permutation',
-                                      classification=False)
-        hits_natty += feature_selector.fit(X, y)
 
-        history_shadow = np.vstack((history_shadow, feature_selector.Shadow_feature_import))
-        history_x = np.vstack((history_x, feature_selector.X_feature_import))
-
-        
-        feature_selector = BorutaShap(importance_measure='Shap',
-                                      classification=False)
-        hits_shap += feature_selector.fit(X, y)
-
-        history_shap_shadow = np.vstack((history_shap_shadow, feature_selector.Shadow_feature_import))
-        history_shap_x = np.vstack((history_shap_x, feature_selector.X_feature_import))
-
-   
-
-    history_x = pd.DataFrame(data=history_x,
-                            columns=X.columns)
-    history_x['Max_Shadow'] =  [max(i) for i in history_shadow]
-    history_x['Min_Shadow'] =  [min(i) for i in history_shadow]
-    history_x['Mean_Shadow'] =  [averageOfList(i) for i in history_shadow]
-    history_x.iloc[1:].to_csv('features_ozone.csv', index=False)
-
-    history_shap_x = pd.DataFrame(data=history_shap_x,
-                                columns=X.columns)
-    history_shap_x['Max_Shadow'] =  [max(i) for i in history_shap_shadow]
-    history_shap_x['Min_Shadow'] =  [min(i) for i in history_shap_shadow]
-    history_shap_x['Mean_Shadow'] =  [averageOfList(i) for i in history_shap_shadow]
-    history_shap_x.iloc[1:].to_csv('Shap_features_ozone.csv', index=False)
-
-    print(hits_natty)
-    print(hits_shap)
-
+    
 
 
