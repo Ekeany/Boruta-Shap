@@ -14,7 +14,11 @@ warnings.filterwarnings("ignore")
 
 """
 todo 
-check all features vrs removing rejected and accepted features
+when doing the tests as the hits still are giving zero for certain features if once accepted are
+now being rejected.
+
+update tehe hits by making it smaller
+
 remove z scores
 create and way to store all of the shap scores 
 
@@ -27,7 +31,7 @@ class BorutaShap:
 
     def __init__(self, model=None, importance_measure='Shap', model_type='tree',
                 classification=True, percentile=100, pvalue=0.05):
-        
+
         self.importance_measure = importance_measure.lower()
         self.percentile = percentile
         self.pvalue = pvalue
@@ -35,7 +39,7 @@ class BorutaShap:
         self.model = model
         self.model_type = model_type
         self.check_model()
-
+        
 
     def check_model(self):
 
@@ -76,8 +80,9 @@ class BorutaShap:
             pass
     
 
-    def fit(self, X, y, n_trials = 20):
+    def fit(self, X, y, n_trials = 20, random_state=0):
         
+        np.random.seed(random_state)
         self.X = X
         self.y = y
         self.n_trials = n_trials
@@ -94,7 +99,7 @@ class BorutaShap:
         self.order = self.create_mapping_between_cols_and_indices()
         for trial in tqdm(range(self.n_trials)):
             
-            #self.remove_features_if_rejected_or_accepted()
+            self.remove_features_if_rejected_or_accepted()
             self.columns = self.X.columns.to_numpy()
             self.create_shadow_features()
 
@@ -214,6 +219,21 @@ class BorutaShap:
         length = len(array)
         return list(filter(lambda x: array[x], range(length)))
     
+    @staticmethod
+    def bonferoni_corrections(pvals, alpha=0.05, n_tests=None):
+
+        pvals = np.array(pvals)
+        
+        if n_tests is None:
+            n_tests = len(pvals)
+        else:
+            pass
+        
+        alphacBon = alpha / float(n_tests)
+        reject = pvals <= alphacBon
+        pvals_corrected = pvals * float(n_tests)
+        return reject, pvals_corrected
+
 
     def test_features(self, iteration):
 
@@ -228,13 +248,13 @@ class BorutaShap:
                                                 alternative='less')
         
         # [1] as function returns a tuple 
-        modified_acceptance_p_values = multipletests(acceptance_p_values,
-                                                    alpha=0.05,
-                                                    method='bonferroni')[1]
+        modified_acceptance_p_values = self.bonferoni_corrections(acceptance_p_values,
+                                                                  alpha=0.05,
+                                                                  n_tests=len(self.columns))[1]
 
-        modified_regect_p_values = multipletests(regect_p_values,
-                                                alpha=0.05,
-                                                method='bonferroni')[1]
+        modified_regect_p_values = self.bonferoni_corrections(regect_p_values,
+                                                              alpha=0.05,
+                                                              n_tests=len(self.columns))[1]
 
         # Take the inverse as we want true to keep featrues
         rejected_columns = np.array(modified_regect_p_values) < self.pvalue
@@ -249,6 +269,7 @@ class BorutaShap:
         self.features_to_remove = np.concatenate([rejected_features,
                                                   accepted_features])
 
+
         self.rejected_columns.append(rejected_features)
         self.accepted_columns.append(accepted_features)
 
@@ -261,10 +282,11 @@ if __name__ == "__main__":
     X = pd.read_csv(current_directory + '\\Datasets\\Ozone.csv')
     y = X.pop('V4')
 
-    Feature_Selector = BorutaShap(model=None, importance_measure='permutation', model_type='tree',
-              classification=False, percentile=100, pvalue=0.05)
+    Feature_Selector = BorutaShap(model=None, importance_measure='permutation',
+                model_type='tree', classification=False, percentile=100,
+                pvalue=0.05)
 
-    Feature_Selector.fit(X,y)
+    Feature_Selector.fit(X=X, y=y, n_trials=40, random_state=42)
 
     print(Feature_Selector.hits)
 
