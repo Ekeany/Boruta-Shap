@@ -80,13 +80,14 @@ class BorutaShap:
             pass
     
 
-    def fit(self, X, y, n_trials = 20, random_state=0):
+    def fit(self, X, y, n_trials = 20, random_state=0, remove_feature_when_done = True):
         
         np.random.seed(random_state)
         self.X = X
         self.y = y
         self.n_trials = n_trials
         self.ncols = self.X.shape[1]
+        self.remove_feature_when_done = remove_feature_when_done
         self.all_columns = self.X.columns.to_numpy()
         self.rejected_columns = []
         self.accepted_columns = []
@@ -97,9 +98,14 @@ class BorutaShap:
         self.features_to_remove = []
         self.hits  = np.zeros(self.ncols)
         self.order = self.create_mapping_between_cols_and_indices()
+        self.create_importance_history()
         for trial in tqdm(range(self.n_trials)):
             
-            self.remove_features_if_rejected_or_accepted()
+            if self.remove_feature_when_done:
+                self.remove_features_if_rejected_or_accepted()
+            else:
+                pass
+
             self.columns = self.X.columns.to_numpy()
             self.create_shadow_features()
 
@@ -109,13 +115,60 @@ class BorutaShap:
             else:
                 self.model.fit(self.X_boruta, self.y)
                 self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
+                self.update_importance_history()
                 self.hits += self.calculate_hits()
                 self.test_features(iteration=trial+1)
 
+        print(self.calculate_rejected_accepted_tentative())
 
-        print(set(self.flatten_list(self.rejected_columns)))
-        print(set(self.flatten_list(self.accepted_columns)))
+
+    def calculate_rejected_accepted_tentative(self):
+
+        rejected  = list(set(self.flatten_list(self.rejected_columns))-set(self.flatten_list(self.accepted_columns)))
+        accepted  = list(set(self.flatten_list(self.accepted_columns)))
+        tentative = list(set(self.all_columns) - set(rejected+accepted))
+
+        return accepted, rejected, tentative
+
+
+    def create_importance_history(self):
+
+        self.history_shadow = np.zeros(self.ncols)
+        self.history_x = np.zeros(self.ncols)
+
     
+    def update_importance_history(self):
+
+        padded_history_shadow  = np.full((self.ncols), np.NaN)
+        padded_history_x = np.full((self.ncols), np.NaN)
+
+        for (index, col) in enumerate(self.columns):
+            map_index = self.order[col]
+            padded_history_shadow[map_index] = self.Shadow_feature_import[index]
+            padded_history_x[map_index] = self.X_feature_import[index]
+
+        self.history_shadow = np.vstack((self.history_shadow, padded_history_shadow))
+        self.history_x = np.vstack((self.history_x, padded_history_x))
+
+
+    def results_to_csv(self, filename='feature_importance'):
+
+        history_x = pd.DataFrame(data=self.history_x,
+                                 columns=self.all_columns)
+
+        
+        history_x['Max_Shadow'] =  [max(i) for i in self.history_shadow]
+        history_x['Min_Shadow'] =  [min(i) for i in self.history_shadow]
+        history_x['Mean_Shadow'] =  [self.average_of_list(i) for i in self.history_shadow]
+        
+
+        features = pd.DataFrame(data={'Features':history_x.iloc[1:].columns.values,
+        'Average Feature Importance':history_x.iloc[1:].mean(axis=0).values,
+        'Standard Deviation Importance':history_x.iloc[1:].std(axis=0).values}).sort_values(by='Average Feature Importance',
+                                                                                            ascending=False)
+
+        features.to_csv(filename + '.csv', index=False)
+
 
     def remove_features_if_rejected_or_accepted(self):
 
@@ -131,8 +184,13 @@ class BorutaShap:
     
 
     @staticmethod
+    def average_of_list(lst):
+        return sum(lst) / len(lst) 
+
+    @staticmethod
     def flatten_list(array):
         return [item for sublist in array for item in sublist]
+
 
     def create_mapping_between_cols_and_indices(self):
         return dict(zip(self.X.columns.to_list(), np.arange(self.X.shape[1])))
@@ -171,14 +229,23 @@ class BorutaShap:
             self.explain()
             vals = np.abs(self.shap_values).mean(0)
 
-            vals = self.calculate_Zscore(vals)
+            if not self.remove_feature_when_done:
+                vals = self.calculate_Zscore(vals)
+            else:
+                pass
+
             X_feature_import = vals[:len(self.X.columns)]
             Shadow_feature_import = vals[len(self.X_shadow.columns):]
 
         elif self.importance_measure == 'permutation':
 
             permuation_importnace_ = permutation_importance(estimator=self.model, X=self.X_boruta, y=self.y)
-            permuation_importnace_ = self.calculate_Zscore(permuation_importnace_.importances_mean)
+            
+            if not self.remove_feature_when_done:
+                permuation_importnace_ = self.calculate_Zscore(permuation_importnace_.importances_mean)
+            else:
+                permuation_importnace_ = permuation_importnace_.importances_mean
+            
             X_feature_import = permuation_importnace_[:len(self.X.columns)]
             Shadow_feature_import = permuation_importnace_[len(self.X.columns):]
             
@@ -219,6 +286,7 @@ class BorutaShap:
         length = len(array)
         return list(filter(lambda x: array[x], range(length)))
     
+
     @staticmethod
     def bonferoni_corrections(pvals, alpha=0.05, n_tests=None):
 
@@ -233,6 +301,11 @@ class BorutaShap:
         reject = pvals <= alphacBon
         pvals_corrected = pvals * float(n_tests)
         return reject, pvals_corrected
+
+
+    @staticmethod
+    def FDR_correction(self):
+        pass
 
 
     def test_features(self, iteration):
@@ -275,6 +348,7 @@ class BorutaShap:
 
 
 
+
 if __name__ == "__main__":
     
     current_directory = os.getcwd()
@@ -282,13 +356,15 @@ if __name__ == "__main__":
     X = pd.read_csv(current_directory + '\\Datasets\\Ozone.csv')
     y = X.pop('V4')
 
-    Feature_Selector = BorutaShap(model=None, importance_measure='permutation',
+    Feature_Selector = BorutaShap(model=None, importance_measure='Shap',
                 model_type='tree', classification=False, percentile=100,
                 pvalue=0.05)
 
-    Feature_Selector.fit(X=X, y=y, n_trials=40, random_state=42)
+    Feature_Selector.fit(X=X, y=y, n_trials=40, random_state=0, remove_feature_when_done=False)
 
+    Feature_Selector.results_to_csv(filename='Shap_importance')
     print(Feature_Selector.hits)
+
 
 
     
