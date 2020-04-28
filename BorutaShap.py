@@ -227,7 +227,9 @@ class BorutaShap:
 
     @staticmethod
     def calculate_Zscore(array):
-        return [(element - np.mean(array)/np.std(array)) for element in array]
+        mean_value = np.mean(array)
+        std_value  = np.std(array)
+        return [(element-mean_value)/std_value for element in array]
 
 
     def feature_importance(self):
@@ -390,7 +392,7 @@ if __name__ == "__main__":
                 model_type='tree', classification=False, percentile=100,
                 pvalue=0.05)
 
-    Feature_Selector.fit(X=X, y=y, n_trials=10, random_state=0, remove_feature_when_done=True)
+    Feature_Selector.fit(X=X, y=y, n_trials=20, random_state=0, remove_feature_when_done=True)
 
     print(Feature_Selector.hits)
 
