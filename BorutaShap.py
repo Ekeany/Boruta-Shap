@@ -2,6 +2,7 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.inspection import permutation_importance
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import binom_test
+from statistics import median, mean
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
@@ -119,16 +120,20 @@ class BorutaShap:
                 self.hits += self.calculate_hits()
                 self.test_features(iteration=trial+1)
 
-        print(self.calculate_rejected_accepted_tentative())
+        self.store_feature_importance()
+        self.calculate_rejected_accepted_tentative()
 
 
     def calculate_rejected_accepted_tentative(self):
 
-        rejected  = list(set(self.flatten_list(self.rejected_columns))-set(self.flatten_list(self.accepted_columns)))
-        accepted  = list(set(self.flatten_list(self.accepted_columns)))
-        tentative = list(set(self.all_columns) - set(rejected+accepted))
+        self.rejected  = list(set(self.flatten_list(self.rejected_columns))-set(self.flatten_list(self.accepted_columns)))
+        self.accepted  = list(set(self.flatten_list(self.accepted_columns)))
+        self.tentative = list(set(self.all_columns) - set(self.rejected + self.accepted))
 
-        return accepted, rejected, tentative
+        print(str(len(self.accepted))  + ' attributes confirmed important: ' + str(self.accepted))
+        print(str(len(self.rejected))  + ' attributes confirmed unimportant: ' + str(self.rejected))
+        print(str(len(self.tentative)) + ' tentative attributes remains: ' + str(self.tentative))
+
 
 
     def create_importance_history(self):
@@ -151,20 +156,23 @@ class BorutaShap:
         self.history_x = np.vstack((self.history_x, padded_history_x))
 
 
-    def results_to_csv(self, filename='feature_importance'):
 
-        history_x = pd.DataFrame(data=self.history_x,
+    def store_feature_importance(self):
+
+        self.history_x = pd.DataFrame(data=self.history_x,
                                  columns=self.all_columns)
-
         
-        history_x['Max_Shadow'] =  [max(i) for i in self.history_shadow]
-        history_x['Min_Shadow'] =  [min(i) for i in self.history_shadow]
-        history_x['Mean_Shadow'] =  [self.average_of_list(i) for i in self.history_shadow]
-        
+        self.history_x['Max_Shadow']    =  [max(i) for i in self.history_shadow]
+        self.history_x['Min_Shadow']    =  [min(i) for i in self.history_shadow]
+        self.history_x['Mean_Shadow']   =  [mean(i) for i in self.history_shadow]
+        self.history_x['Median_Shadow'] = [median(i) for i in self.history_shadow]
 
-        features = pd.DataFrame(data={'Features':history_x.iloc[1:].columns.values,
-        'Average Feature Importance':history_x.iloc[1:].mean(axis=0).values,
-        'Standard Deviation Importance':history_x.iloc[1:].std(axis=0).values}).sort_values(by='Average Feature Importance',
+
+    def results_to_csv(self, filename='feature_importance'):
+    
+        features = pd.DataFrame(data={'Features':self.history_x.iloc[1:].columns.values,
+        'Average Feature Importance':self.history_x.iloc[1:].mean(axis=0).values,
+        'Standard Deviation Importance':self.history_x.iloc[1:].std(axis=0).values}).sort_values(by='Average Feature Importance',
                                                                                             ascending=False)
 
         features.to_csv(filename + '.csv', index=False)
@@ -229,7 +237,7 @@ class BorutaShap:
             self.explain()
             vals = np.abs(self.shap_values).mean(0)
 
-            if not self.remove_feature_when_done:
+            if self.remove_feature_when_done:
                 vals = self.calculate_Zscore(vals)
             else:
                 pass
@@ -240,8 +248,8 @@ class BorutaShap:
         elif self.importance_measure == 'permutation':
 
             permuation_importnace_ = permutation_importance(estimator=self.model, X=self.X_boruta, y=self.y)
-            
-            if not self.remove_feature_when_done:
+
+            if self.remove_feature_when_done:
                 permuation_importnace_ = self.calculate_Zscore(permuation_importnace_.importances_mean)
             else:
                 permuation_importnace_ = permuation_importnace_.importances_mean
@@ -347,6 +355,24 @@ class BorutaShap:
         self.accepted_columns.append(accepted_features)
 
 
+    def TentativeRoughFix(self):
+        
+        median_tentaive_values = self.history_x[self.tentative].median(axis=0).values
+        median_max_shadow = self.history_x['Max_Shadow'].median(axis=0)
+        
+
+        filtered = median_tentaive_values > median_max_shadow
+
+        self.tentative = np.array(self.tentative)
+        newly_accepted = self.tentative[filtered]
+        newly_rejected = np.setdiff1d(newly_accepted, self.tentative)
+
+        print(str(len(newly_accepted)) + ' tentative features are now accepted: ' + str(newly_accepted))
+        print(str(len(newly_rejected)) + ' tentative features are now rejected: ' + str(newly_rejected))
+
+        self.rejected = self.rejected + newly_rejected.tolist()
+        self.accepted = self.accepted + newly_accepted.tolist()
+
 
 
 if __name__ == "__main__":
@@ -356,14 +382,24 @@ if __name__ == "__main__":
     X = pd.read_csv(current_directory + '\\Datasets\\Ozone.csv')
     y = X.pop('V4')
 
+    #X = pd.read_csv(current_directory + '\\Datasets\\Madelon.csv')
+    #y = X.pop('decision')
+
+
     Feature_Selector = BorutaShap(model=None, importance_measure='Shap',
                 model_type='tree', classification=False, percentile=100,
                 pvalue=0.05)
 
-    Feature_Selector.fit(X=X, y=y, n_trials=40, random_state=0, remove_feature_when_done=False)
+    Feature_Selector.fit(X=X, y=y, n_trials=10, random_state=0, remove_feature_when_done=True)
 
-    Feature_Selector.results_to_csv(filename='Shap_importance')
     print(Feature_Selector.hits)
+
+    Feature_Selector.TentativeRoughFix()
+
+
+    Feature_Selector.results_to_csv()
+    print(Feature_Selector.accepted)
+    print(Feature_Selector.rejected)
 
 
 
