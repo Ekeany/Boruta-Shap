@@ -14,14 +14,7 @@ warnings.filterwarnings("ignore")
 
 
 """
-todo 
-when doing the tests as the hits still are giving zero for certain features if once accepted are
-now being rejected.
-
-update tehe hits by making it smaller
-
-remove z scores
-create and way to store all of the shap scores 
+todo ajust the max min and median shadow features into percentiles if required
 
 """
 
@@ -234,6 +227,7 @@ class BorutaShap:
 
     def feature_importance(self):
 
+
         if self.importance_measure == 'shap':
 
             self.explain()
@@ -247,6 +241,7 @@ class BorutaShap:
             X_feature_import = vals[:len(self.X.columns)]
             Shadow_feature_import = vals[len(self.X_shadow.columns):]
 
+
         elif self.importance_measure == 'permutation':
 
             permuation_importnace_ = permutation_importance(estimator=self.model, X=self.X_boruta, y=self.y)
@@ -258,11 +253,25 @@ class BorutaShap:
             
             X_feature_import = permuation_importnace_[:len(self.X.columns)]
             Shadow_feature_import = permuation_importnace_[len(self.X.columns):]
+
+
+        elif self.importance_measure == 'gini':
             
+            if self.remove_feature_when_done:
+
+                feature_importances_ = self.calculate_Zscore(self.model.feature_importances_)
+                X_feature_import = feature_importances_[:len(self.X.columns)]
+                Shadow_feature_import = feature_importances_[len(self.X.columns):]
+            
+            else:
+
+                X_feature_import = self.model.feature_importances_[:len(self.X.columns)]
+                Shadow_feature_import = self.model.feature_importances_[len(self.X.columns):]
+
+
         else:
-            
-            X_feature_import = self.model.feature_importances_[:len(self.X.columns)]
-            Shadow_feature_import = self.model.feature_importances_[len(self.X.columns):]
+
+            raise ValueError('No Importance_measure was specified')
 
         return X_feature_import, Shadow_feature_import
 
@@ -388,7 +397,7 @@ if __name__ == "__main__":
     #y = X.pop('decision')
 
 
-    Feature_Selector = BorutaShap(model=None, importance_measure='Shap',
+    Feature_Selector = BorutaShap(model=None, importance_measure='gini',
                 model_type='tree', classification=False, percentile=100,
                 pvalue=0.05)
 
