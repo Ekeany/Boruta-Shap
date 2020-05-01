@@ -2,7 +2,6 @@ from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.inspection import permutation_importance
 from statsmodels.stats.multitest import multipletests
 from scipy.stats import binom_test
-from statistics import median, mean
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
@@ -17,8 +16,6 @@ warnings.filterwarnings("ignore")
 todo ajust the max min and median shadow features into percentiles if required
 
 """
-
-
 
 
 class BorutaShap:
@@ -155,19 +152,22 @@ class BorutaShap:
         self.history_x = pd.DataFrame(data=self.history_x,
                                  columns=self.all_columns)
         
+
         self.history_x['Max_Shadow']    =  [max(i) for i in self.history_shadow]
         self.history_x['Min_Shadow']    =  [min(i) for i in self.history_shadow]
-        self.history_x['Mean_Shadow']   =  [mean(i) for i in self.history_shadow]
-        self.history_x['Median_Shadow'] = [median(i) for i in self.history_shadow]
+        self.history_x['Mean_Shadow']   =  [np.nanmean(i) for i in self.history_shadow]
+        self.history_x['Median_Shadow'] =  [np.nanmedian(i) for i in self.history_shadow]
 
 
     def results_to_csv(self, filename='feature_importance'):
     
+        self.history_x .dropna(axis=0,inplace=True)
         features = pd.DataFrame(data={'Features':self.history_x.iloc[1:].columns.values,
         'Average Feature Importance':self.history_x.iloc[1:].mean(axis=0).values,
         'Standard Deviation Importance':self.history_x.iloc[1:].std(axis=0).values}).sort_values(by='Average Feature Importance',
                                                                                             ascending=False)
 
+        self.history_x[1:].to_csv(filename + 'x.csv',index=False)
         features.to_csv(filename + '.csv', index=False)
 
 
@@ -198,6 +198,7 @@ class BorutaShap:
 
 
     def calculate_hits(self):
+
         shadow_threshold = np.percentile(self.Shadow_feature_import,
                                         self.percentile)
         
@@ -232,11 +233,7 @@ class BorutaShap:
 
             self.explain()
             vals = np.abs(self.shap_values).mean(0)
-
-            if self.remove_feature_when_done:
-                vals = self.calculate_Zscore(vals)
-            else:
-                pass
+            vals = self.calculate_Zscore(vals)
 
             X_feature_import = vals[:len(self.X.columns)]
             Shadow_feature_import = vals[len(self.X_shadow.columns):]
@@ -246,32 +243,21 @@ class BorutaShap:
 
             permuation_importnace_ = permutation_importance(estimator=self.model, X=self.X_boruta, y=self.y)
 
-            if self.remove_feature_when_done:
-                permuation_importnace_ = self.calculate_Zscore(permuation_importnace_.importances_mean)
-            else:
-                permuation_importnace_ = permuation_importnace_.importances_mean
-            
+            permuation_importnace_ = self.calculate_Zscore(np.abs(permuation_importnace_.importances_mean))
             X_feature_import = permuation_importnace_[:len(self.X.columns)]
             Shadow_feature_import = permuation_importnace_[len(self.X.columns):]
 
 
         elif self.importance_measure == 'gini':
             
-            if self.remove_feature_when_done:
-
-                feature_importances_ = self.calculate_Zscore(self.model.feature_importances_)
+                feature_importances_ = self.calculate_Zscore(np.abs(self.model.feature_importances_))
                 X_feature_import = feature_importances_[:len(self.X.columns)]
                 Shadow_feature_import = feature_importances_[len(self.X.columns):]
-            
-            else:
-
-                X_feature_import = self.model.feature_importances_[:len(self.X.columns)]
-                Shadow_feature_import = self.model.feature_importances_[len(self.X.columns):]
 
 
         else:
 
-            raise ValueError('No Importance_measure was specified')
+            raise ValueError('No Importance_measure was specified select one of (shap, gini, permutation)')
 
         return X_feature_import, Shadow_feature_import
 
@@ -320,11 +306,6 @@ class BorutaShap:
         reject = pvals <= alphacBon
         pvals_corrected = pvals * float(n_tests)
         return reject, pvals_corrected
-
-
-    @staticmethod
-    def FDR_correction(self):
-        pass
 
 
     def test_features(self, iteration):
@@ -376,13 +357,19 @@ class BorutaShap:
 
         self.tentative = np.array(self.tentative)
         newly_accepted = self.tentative[filtered]
-        newly_rejected = np.setdiff1d(newly_accepted, self.tentative)
+        
+        if len(newly_accepted) < 1:
+            newly_rejected = self.tentative
+
+        else:
+            newly_rejected = np.setdiff1d(newly_accepted, self.tentative)
 
         print(str(len(newly_accepted)) + ' tentative features are now accepted: ' + str(newly_accepted))
         print(str(len(newly_rejected)) + ' tentative features are now rejected: ' + str(newly_rejected))
 
         self.rejected = self.rejected + newly_rejected.tolist()
         self.accepted = self.accepted + newly_accepted.tolist()
+
 
 
 
@@ -397,7 +384,7 @@ if __name__ == "__main__":
     #y = X.pop('decision')
 
 
-    Feature_Selector = BorutaShap(model=None, importance_measure='gini',
+    Feature_Selector = BorutaShap(model=None, importance_measure='permutation',
                 model_type='tree', classification=False, percentile=100,
                 pvalue=0.05)
 
@@ -408,7 +395,7 @@ if __name__ == "__main__":
     Feature_Selector.TentativeRoughFix()
 
 
-    Feature_Selector.results_to_csv()
+    Feature_Selector.results_to_csv(filename='shapy')
     print(Feature_Selector.accepted)
     print(Feature_Selector.rejected)
 
