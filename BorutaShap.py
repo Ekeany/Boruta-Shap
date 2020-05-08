@@ -1,8 +1,10 @@
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
 from sklearn.inspection import permutation_importance
 from statsmodels.stats.multitest import multipletests
+from sklearn.model_selection import cross_val_score
 from scipy.stats import binom_test
 from tqdm import tqdm
+import random
 import pandas as pd
 import numpy as np
 import shap
@@ -71,12 +73,15 @@ class BorutaShap:
             pass
     
 
-    def fit(self, X, y, n_trials = 20, random_state=0, remove_feature_when_done = True):
+    def fit(self, X, y, n_trials = 20, random_state=0, remove_feature_when_done = True, sample=False, sample_fraction=0.2):
         
         np.random.seed(random_state)
-        self.X = X
-        self.y = y
+        self.X = X.copy()
+        self.y = y.copy()
         self.n_trials = n_trials
+        self.sample = sample
+        self.fraction = sample_fraction
+        self.random_state = random_state
         self.ncols = self.X.shape[1]
         self.remove_feature_when_done = remove_feature_when_done
         self.all_columns = self.X.columns.to_numpy()
@@ -161,13 +166,12 @@ class BorutaShap:
 
     def results_to_csv(self, filename='feature_importance'):
     
-        self.history_x .dropna(axis=0,inplace=True)
+        self.history_x.dropna(axis=0,inplace=True)
         features = pd.DataFrame(data={'Features':self.history_x.iloc[1:].columns.values,
         'Average Feature Importance':self.history_x.iloc[1:].mean(axis=0).values,
         'Standard Deviation Importance':self.history_x.iloc[1:].std(axis=0).values}).sort_values(by='Average Feature Importance',
                                                                                             ascending=False)
-
-        self.history_x[1:].to_csv(filename + 'x.csv',index=False)
+        self.history_x.iloc[1:].to_csv(filename + 'xxx.csv', index=False)
         features.to_csv(filename + '.csv', index=False)
 
 
@@ -228,7 +232,6 @@ class BorutaShap:
 
     def feature_importance(self):
 
-
         if self.importance_measure == 'shap':
 
             self.explain()
@@ -238,22 +241,21 @@ class BorutaShap:
             X_feature_import = vals[:len(self.X.columns)]
             Shadow_feature_import = vals[len(self.X_shadow.columns):]
 
-
         elif self.importance_measure == 'permutation':
-
-            permuation_importnace_ = permutation_importance(estimator=self.model, X=self.X_boruta, y=self.y)
+            
+            X_train, X_test, y_train, y_test = train_test_split(self.X_boruta, self.y, test_size=0.33, random_state=self.random_state)
+            self.model.fit(X=X_train, y=y_train)
+            permuation_importnace_ = permutation_importance(estimator=self.model, X=X_test, y=y_test)
 
             permuation_importnace_ = self.calculate_Zscore(np.abs(permuation_importnace_.importances_mean))
             X_feature_import = permuation_importnace_[:len(self.X.columns)]
             Shadow_feature_import = permuation_importnace_[len(self.X.columns):]
-
 
         elif self.importance_measure == 'gini':
             
                 feature_importances_ = self.calculate_Zscore(np.abs(self.model.feature_importances_))
                 X_feature_import = feature_importances_[:len(self.X.columns)]
                 Shadow_feature_import = feature_importances_[len(self.X.columns):]
-
 
         else:
 
@@ -262,16 +264,35 @@ class BorutaShap:
         return X_feature_import, Shadow_feature_import
 
 
+    def get_sample(self):
+
+        if self.fraction > 1 or self.fraction < 0:
+            raise ValueError('Frac must be between 0-1')
+
+        else:
+            return self.X_boruta.sample(frac=self.fraction, replace=False, random_state=self.random_state)
+
+
     def explain(self):
 
         if self.model_type == 'tree':
-            explainer = shap.TreeExplainer(self.model)
+            explainer = shap.TreeExplainer(self.model, approximate=True)
             
-            if self.classification:
-                # for some reason shap returns values wraped in a list of length 1
-                self.shap_values = explainer.shap_values(self.X_boruta)[0]
+            if self.sample:
+                if self.classification:
+                    # for some reason shap returns values wraped in a list of length 1
+                    self.shap_values = explainer.shap_values(self.get_sample())[0]
+                else:
+                    self.shap_values = explainer.shap_values(self.get_sample())
             else:
-                self.shap_values = explainer.shap_values(self.X_boruta)
+
+                if self.classification:
+                    # for some reason shap returns values wraped in a list of length 1
+                    self.shap_values = explainer.shap_values(self.X_boruta)[0]
+                else:
+                    self.shap_values = explainer.shap_values(self.X_boruta)
+
+            
 
         elif self.model_type == 'linear':
             explainer = shap.LinearExplainer(self.model, self.X_boruta, feature_dependence="independent")
@@ -284,6 +305,13 @@ class BorutaShap:
     @staticmethod
     def binomial_H0_test(array, n, p, alternative):
         return [binom_test(x, n=n, p=p, alternative=alternative) for x in array]
+
+    
+    @staticmethod
+    def symetric_difference_between_two_arrays(array_one, array_two):
+        set_one = set(array_one)
+        set_two = set(array_two)
+        return np.array(list(set_one.symmetric_difference(set_two)))
 
 
     @staticmethod
@@ -339,8 +367,9 @@ class BorutaShap:
         rejected_features = self.all_columns[rejected_indices]
         accepted_features = self.all_columns[accepted_indices]
 
-        self.features_to_remove = np.concatenate([rejected_features,
-                                                  accepted_features])
+        #self.features_to_remove = np.concatenate([rejected_features,
+                                                  #accepted_features])
+        self.features_to_remove = rejected_features
 
 
         self.rejected_columns.append(rejected_features)
@@ -362,7 +391,7 @@ class BorutaShap:
             newly_rejected = self.tentative
 
         else:
-            newly_rejected = np.setdiff1d(newly_accepted, self.tentative)
+            newly_rejected = self.symetric_difference_between_two_arrays(newly_accepted, self.tentative)
 
         print(str(len(newly_accepted)) + ' tentative features are now accepted: ' + str(newly_accepted))
         print(str(len(newly_rejected)) + ' tentative features are now rejected: ' + str(newly_rejected))
@@ -371,34 +400,42 @@ class BorutaShap:
         self.accepted = self.accepted + newly_accepted.tolist()
 
 
+    def Subset(self, X):
+        X = X.copy()
+        return X[self.accepted]
+
 
 
 if __name__ == "__main__":
     
+    from sklearn.model_selection import train_test_split
+
     current_directory = os.getcwd()
 
-    X = pd.read_csv(current_directory + '\\Datasets\\Ozone.csv')
-    y = X.pop('V4')
+    X = pd.read_csv(current_directory + '\\Datasets\\Madelon.csv')
+    #y = X.pop('V4')
+    #print(X.columns)
+    y = X.pop('decision')
 
-    #X = pd.read_csv(current_directory + '\\Datasets\\Madelon.csv')
-    #y = X.pop('decision')
 
-
-    Feature_Selector = BorutaShap(model=None, importance_measure='permutation',
-                model_type='tree', classification=False, percentile=100,
+    Feature_Selector = BorutaShap(model=None, importance_measure='shap',
+                model_type='tree', classification=True, percentile=100,
                 pvalue=0.05)
 
-    Feature_Selector.fit(X=X, y=y, n_trials=20, random_state=0, remove_feature_when_done=True)
-
-    print(Feature_Selector.hits)
+    Feature_Selector.fit(X=X, y=y, n_trials=20, random_state=0, remove_feature_when_done=True,
+                        sample_fraction=0.1, sample=True)
 
     Feature_Selector.TentativeRoughFix()
+    Feature_Selector.results_to_csv(filename='perm_importance_madelon_test')
+  
+    print(Feature_Selector.hits)
 
+    X = Feature_Selector.Subset(X)
 
-    Feature_Selector.results_to_csv(filename='shapy')
-    print(Feature_Selector.accepted)
-    print(Feature_Selector.rejected)
-
+    model = RandomForestClassifier()
+    scores = cross_val_score(model, X, y, cv=5)
+    print(scores)
+    print(scores.mean())
 
 
     
