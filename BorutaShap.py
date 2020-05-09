@@ -61,10 +61,22 @@ class BorutaShap:
             pass
 
 
+    def missing_values_y(self):
+
+        if isinstance(self.y, pd.Series):
+            return self.y.isnull().any().any()
+        
+        elif isinstance(self.y, np.ndarray):
+            return np.isnan(self.y).any()
+
+        else:
+            raise AttributeError('Y must be a pandas Dataframe or a numpy array')
+
+
     def check_missing_values(self):
 
         X_missing = self.X.isnull().any().any()
-        Y_missing = self.y.isnull().any().any()
+        Y_missing = self.missing_values_y()
 
         if X_missing or Y_missing:
             raise ValueError('There are missing values in your Data')
@@ -409,34 +421,43 @@ class BorutaShap:
 if __name__ == "__main__":
     
     from sklearn.model_selection import train_test_split
+    from sklearn.datasets import load_breast_cancer
 
     current_directory = os.getcwd()
 
-    X = pd.read_csv(current_directory + '\\Datasets\\Madelon.csv')
+    #X = pd.read_csv(current_directory + '\\Datasets\\Madelon.csv')
     #y = X.pop('V4')
     #print(X.columns)
-    y = X.pop('decision')
+    #y = X.pop('decision')
 
+    #X, y = shap.datasets.boston()
+    cancer = load_breast_cancer()
+    X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
+    X.to_csv('cancer.csv',index=False)
+    y = X.pop('target')
 
-    Feature_Selector = BorutaShap(model=None, importance_measure='shap',
+    '''
+    Feature_Selector = BorutaShap(model=None, importance_measure='perm',
                 model_type='tree', classification=True, percentile=100,
                 pvalue=0.05)
 
-    Feature_Selector.fit(X=X, y=y, n_trials=20, random_state=0, remove_feature_when_done=True,
-                        sample_fraction=0.1, sample=True)
+    Feature_Selector.fit(X=X, y=y, n_trials=25, random_state=0, remove_feature_when_done=True,
+                        sample_fraction=0.1, sample=False)
 
     Feature_Selector.TentativeRoughFix()
-    Feature_Selector.results_to_csv(filename='perm_importance_madelon_test')
+
+    Feature_Selector.results_to_csv(filename='perm_importance_breast')
   
     print(Feature_Selector.hits)
 
     X = Feature_Selector.Subset(X)
 
+
     model = RandomForestClassifier()
     scores = cross_val_score(model, X, y, cv=5)
     print(scores)
     print(scores.mean())
-
+    '''
 
     
 
