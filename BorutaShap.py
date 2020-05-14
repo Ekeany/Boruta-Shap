@@ -5,6 +5,7 @@ from sklearn.model_selection import cross_val_score
 from scipy.stats import binom_test
 from tqdm import tqdm
 import random
+import timeit
 import pandas as pd
 import numpy as np
 import shap
@@ -15,7 +16,9 @@ warnings.filterwarnings("ignore")
 
 
 """
-todo ajust the max min and median shadow features into percentiles if required
+todo remove permutation importance as not needed
+add multi class 
+possibly add boxplot chart ?
 
 """
 
@@ -50,6 +53,7 @@ class BorutaShap:
 
         else:
             pass
+            
 
 
     def check_X(self):
@@ -102,6 +106,7 @@ class BorutaShap:
         
         self.check_X()
         self.check_missing_values()
+
 
         self.features_to_remove = []
         self.hits  = np.zeros(self.ncols)
@@ -247,7 +252,7 @@ class BorutaShap:
         if self.importance_measure == 'shap':
 
             self.explain()
-            vals = np.abs(self.shap_values).mean(0)
+            vals = np.abs(self.shap_values).sum(axis=0).mean(axis=0)
             vals = self.calculate_Zscore(vals)
 
             X_feature_import = vals[:len(self.X.columns)]
@@ -279,7 +284,7 @@ class BorutaShap:
     def get_sample(self):
 
         if self.fraction > 1 or self.fraction < 0:
-            raise ValueError('Frac must be between 0-1')
+            raise ValueError('sample_fraction must be between 0-1')
 
         else:
             return self.X_boruta.sample(frac=self.fraction, replace=False, random_state=self.random_state)
@@ -418,6 +423,44 @@ class BorutaShap:
 
 
 
+def jaccard_similarity(array_one, array_two):
+    intersection = set(array_one).intersection(set(array_two))
+    union = set(array_one).union(set(array_two))
+    return len(intersection)/len(union)
+
+
+def calculate_sampling(X,y,classifiaction=True):
+
+    Feature_Selector = BorutaShap(model=None, importance_measure='shap',
+                model_type='tree', classification=classifiaction, percentile=100,
+                pvalue=0.05)
+
+
+    Feature_Selector.fit(X=X, y=y, n_trials=50, random_state=0, remove_feature_when_done=True,
+                        sample_fraction=0.1, sample=False)
+    Feature_Selector.TentativeRoughFix()
+    original = Feature_Selector.accepted
+
+    samples = np.arange(5,100,5)
+    jaccard = []
+    time = []
+    for sample_ in samples:
+
+        start = timeit.default_timer()
+        Feature_Selector.fit(X=X, y=y, n_trials=50, random_state=0, remove_feature_when_done=True,
+                        sample_fraction=sample_/100, sample=True)
+        Feature_Selector.TentativeRoughFix()
+        stop = timeit.default_timer()
+        time.append(stop-start)
+        subset = Feature_Selector.accepted
+        similarity = jaccard_similarity(subset,original)
+        jaccard.append(similarity)
+
+    return pd.DataFrame({'Samples':samples,'Jaccard':jaccard,'Time':time})
+
+
+
+
 if __name__ == "__main__":
     
     from sklearn.model_selection import train_test_split
@@ -425,20 +468,22 @@ if __name__ == "__main__":
 
     current_directory = os.getcwd()
 
-    #X = pd.read_csv(current_directory + '\\Datasets\\Madelon.csv')
-    #y = X.pop('V4')
+    X = pd.read_csv(current_directory + '\\Datasets\\Ozone.csv')
+    y = X.pop('V4')
     #print(X.columns)
     #y = X.pop('decision')
 
-    #X, y = shap.datasets.boston()
-    cancer = load_breast_cancer()
-    X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
-    X.to_csv('cancer.csv',index=False)
-    y = X.pop('target')
+    #cancer = load_breast_cancer()
+    #X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
+    #X.to_csv('cancer.csv',index=False)
+    #y = X.pop('target')
 
-    '''
-    Feature_Selector = BorutaShap(model=None, importance_measure='perm',
-                model_type='tree', classification=True, percentile=100,
+    #data = calculate_sampling(X,y,classifiaction=True)
+    #data.to_csv('C:/Users/egnke/PythonCode/Boruta-Shap/sampling_madelon.csv', index=False)
+
+
+    Feature_Selector = BorutaShap(model=None, importance_measure='shap',
+                model_type='tree', classification=False, percentile=100,
                 pvalue=0.05)
 
     Feature_Selector.fit(X=X, y=y, n_trials=25, random_state=0, remove_feature_when_done=True,
@@ -446,19 +491,14 @@ if __name__ == "__main__":
 
     Feature_Selector.TentativeRoughFix()
 
-    Feature_Selector.results_to_csv(filename='perm_importance_breast')
+    Feature_Selector.results_to_csv(filename='Ozone_new')
   
     print(Feature_Selector.hits)
 
     X = Feature_Selector.Subset(X)
-
-
-    model = RandomForestClassifier()
-    scores = cross_val_score(model, X, y, cv=5)
-    print(scores)
-    print(scores.mean())
-    '''
-
     
 
-
+    model = RandomForestRegressor()
+    scores = cross_val_score(model, X, y, cv=5, scoring='neg_mean_squared_error')
+    print(scores)
+    print(scores.mean())
