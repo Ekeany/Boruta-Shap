@@ -714,7 +714,7 @@ class BorutaShap:
         self.accepted = self.accepted + newly_accepted.tolist()
 
 
-    def Subset(self, X):
+    def Subset(self):
         """
         Returns the subset of desired features
         """
@@ -726,17 +726,63 @@ class BorutaShap:
         colors = [color for x in range(len(array))]
         return colors
 
+    @staticmethod
+    def filter_data(data, column, value):
+        data = data.copy()
+        return data.loc[(data[column] == value) | (data[column] == 'Shadow')]
+
     
-    def plot(self, X_rotation=90, X_size=5, y_scale='log'):
+    @staticmethod
+    def check_if_which_features_is_correct(my_string):
+        
+        my_string = str(my_string).lower()
+        if my_string in ['tentative','rejected','accepted','all']:
+            pass
+
+        else:
+            raise ValueError(my_string + " is not a valid value did you mean to type 'all', 'tentative', 'accepted' or 'rejected' ?")
+
+
+    
+    def plot(self, X_rotation=90, X_size=5, y_scale='log', which_features='all'):
 
         """
         creates a boxplot of the feature importances
+
+        Parameters
+        ----------
+        X_rotation: int
+            Controls the orientation angle of the tick labels on the X-axis
+
+        X_size: int
+            Controls the font size of the tick labels
+
+        y_scale: string
+            Log transform of the y axis scale as hard to see the plot as it is normally dominated by two or three
+            features.
+
+        which_features: string
+            Despite efforts if the number of columns is large the plot becomes cluttered so this parameter allows you to 
+            select subsets of the features like the accepted, rejected or tentative features default is all.
+
         """
         # data from wide to long
         data = self.history_x.iloc[1:]
         data['index'] = data.index
         data = pd.melt(data, id_vars='index', var_name='Methods')
+
+        decision_mapper = self.create_mapping_of_features_to_attribute(maps=['Tentative','Rejected','Accepted', 'Shadow'])
+        data['Decision'] = data['Methods'].map(decision_mapper)
         data.drop(['index'], axis=1, inplace=True)
+
+        options = { 'accepted' : self.filter_data(data,'Decision', 'Accepted'),
+                    'tentative': self.filter_data(data,'Decision', 'Tentative'),
+                    'rejected' : self.filter_data(data,'Decision', 'Rejected'),
+                    'all' : data
+                    }
+
+        self.check_if_which_features_is_correct(which_features)
+        data = options[which_features.lower()]
 
         self.box_plot(data=data,
                       X_rotation=X_rotation,
