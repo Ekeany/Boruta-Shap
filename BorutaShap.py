@@ -1,5 +1,4 @@
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.inspection import permutation_importance
 from statsmodels.stats.multitest import multipletests
 from sklearn.model_selection import cross_val_score
 from scipy.stats import binom_test
@@ -16,15 +15,42 @@ import warnings
 warnings.filterwarnings("ignore")
 
 
-"""
-todo ajust the max min and median shadow features into percentiles if required
-"""
-
-
 class BorutaShap:
+
+    """
+    BorutaShap is a wrapper feature selection method built on the foundations of both the SHAP and Boruta algorithms.
+
+    """
 
     def __init__(self, model=None, importance_measure='Shap', model_type='tree',
                 classification=True, percentile=100, pvalue=0.05):
+
+        """
+        Parameters
+        ----------
+        model: Model Object
+            If no model specified then a base Random Forest will be returned otherwise the specifed model will
+            be returned.
+
+        importance_measure: String
+            Which importance measure too use either Shap or Gini/Gain
+
+        model_type: String
+            which model type will you be using, as SHAP has various explainers for different model types
+
+        classification: Boolean
+            if true then the problem is either a binary or multiclass problem otherwise if false then it is regression
+
+        percentile: Int
+            An integer ranging from 0-100 it changes the value of the max shadow importance values. Thus, lowering its value
+            would make the algorithm more lenient.
+
+        p_value: float
+            A float used as a significance level again if the p-value is increased the algorithm will be more lenient making it smaller
+            would make it more strict also by making the model more strict could impact runtime making it slower. As it will be less likley
+            to reject and accept features.
+       
+        """
 
         self.importance_measure = importance_measure.lower()
         self.percentile = percentile
@@ -37,10 +63,28 @@ class BorutaShap:
 
     def check_model(self):
 
+        """
+        Checks that a model object has been passed as a parameter when intiializing the BorutaShap class.
+       
+        Returns
+        -------
+        Model Object
+            If no model specified then a base Random Forest will be returned otherwise the specifed model will
+            be returned.
+
+        Raises
+        ------
+        AttirbuteError
+             If the model object does not have the required attributes.
+       
+        """
+
         check_fit = hasattr(self.model, 'fit')
         check_predict_proba = hasattr(self.model, 'predict')
+        check_feature_importance = hasattr(self.model, 'feature_importances_')
 
         if self.model is None:
+
             if self.classification:
                 self.model = RandomForestClassifier()
             else:
@@ -49,11 +93,28 @@ class BorutaShap:
         elif check_fit is False and check_predict_proba is False:
             raise AttributeError('Model must contain both the fit() and predict() methods')
 
+        elif check_feature_importance is False and self.importance_measure == 'gini':
+            raise AttributeError('Model must contain the feature_importances_ method to use Gini try Shap instead')
+
         else:
             pass
 
 
     def check_X(self):
+
+        """
+        Checks that the data passed to the BorutaShap instance is a pandas Dataframe
+       
+        Returns
+        -------
+        Datframe
+
+        Raises
+        ------
+        AttirbuteError
+             If the data is not of the expected type.
+       
+        """
 
         if isinstance(self.X, pd.DataFrame) is False:
             raise AttributeError('X must be a pandas Dataframe')
@@ -63,6 +124,20 @@ class BorutaShap:
 
 
     def missing_values_y(self):
+
+        """
+        Checks for missing values in target variable.
+       
+        Returns
+        -------
+        Boolean
+
+        Raises
+        ------
+        AttirbuteError
+             If data is not in the expected format.
+       
+        """
 
         if isinstance(self.y, pd.Series):
             return self.y.isnull().any().any()
@@ -76,6 +151,20 @@ class BorutaShap:
 
     def check_missing_values(self):
 
+        """
+        Checks for missing values in the data.
+       
+        Returns
+        -------
+        Boolean
+
+        Raises
+        ------
+        AttirbuteError
+             If there are missing values present.
+       
+        """
+
         X_missing = self.X.isnull().any().any()
         Y_missing = self.missing_values_y()
 
@@ -86,9 +175,60 @@ class BorutaShap:
             pass
     
 
-    def fit(self, X, y, n_trials = 20, random_state=0, remove_feature_when_done = True, sample=False, sample_fraction=0.2):
+    def fit(self, X, y, n_trials = 20, random_state=0, sample=False, sample_fraction=0.25):
+
+        """
+        The main body of the program this method it computes the following
+
+        1. Extend the information system by adding copies of all variables (the information system
+        is always extended by at least 5 shadow attributes, even if the number of attributes in
+        the original set is lower than 5).
+
+        2. Shuffle the added attributes to remove their correlations with the response.
+
+        3. Run a random forest classifier on the extended information system and gather the
+        Z scores computed.
+
+        4. Find the maximum Z score among shadow attributes (MZSA), and then assign a hit to
+        every attribute that scored better than MZSA.
+        
+        5. For each attribute with undetermined importance perform a two-sided test of equality
+        with the MZSA.
+
+        6. Deem the attributes which have importance significantly lower than MZSA as ‘unimportant’
+        and permanently remove them from the information system.
+
+        7. Deem the attributes which have importance significantly higher than MZSA as ‘important’.
+
+        8. Remove all shadow attributes.
+
+        9. Repeat the procedure until the importance is assigned for all the attributes, or the
+        algorithm has reached the previously set limit of the random forest runs.
+
+        10. Stores results.
+
+        Parameters
+        ----------
+        X: Dataframe
+            A pandas dataframe of the features.
+
+        y: Series/ndarray
+            A pandas series or numpy ndarray of the target 
+            
+        random_state: int
+            A random state for reproducibility of results
+
+        Sample: Boolean
+            if true then the a rowise sample of the data will be used to calculate the feature importance values
+
+        sample_fraction: float
+            The sample fraction of the original data used in calculating the feature importance values only
+            used if Sample==True.
+       
+        """
         
         np.random.seed(random_state)
+        self.starting_X = X.copy()
         self.X = X.copy()
         self.y = y.copy()
         self.n_trials = n_trials
@@ -96,7 +236,6 @@ class BorutaShap:
         self.fraction = sample_fraction
         self.random_state = random_state
         self.ncols = self.X.shape[1]
-        self.remove_feature_when_done = remove_feature_when_done
         self.all_columns = self.X.columns.to_numpy()
         self.rejected_columns = []
         self.accepted_columns = []
@@ -108,13 +247,10 @@ class BorutaShap:
         self.hits  = np.zeros(self.ncols)
         self.order = self.create_mapping_between_cols_and_indices()
         self.create_importance_history()
+
         for trial in tqdm(range(self.n_trials)):
             
-            if self.remove_feature_when_done:
-                self.remove_features_if_rejected_or_accepted()
-            else:
-                pass
-
+            self.remove_features_if_rejected()
             self.columns = self.X.columns.to_numpy()
             self.create_shadow_features()
 
@@ -134,6 +270,15 @@ class BorutaShap:
 
     def calculate_rejected_accepted_tentative(self):
 
+        """
+        Figures out which features have been either accepted rejeected or tentative
+       
+        Returns
+        -------
+        3 lists
+       
+        """
+
         self.rejected  = list(set(self.flatten_list(self.rejected_columns))-set(self.flatten_list(self.accepted_columns)))
         self.accepted  = list(set(self.flatten_list(self.accepted_columns)))
         self.tentative = list(set(self.all_columns) - set(self.rejected + self.accepted))
@@ -146,11 +291,29 @@ class BorutaShap:
 
     def create_importance_history(self):
 
+        """
+        Creates a dataframe object to store historical feature importance scores.
+       
+        Returns
+        -------
+        Datframe
+       
+        """
+
         self.history_shadow = np.zeros(self.ncols)
         self.history_x = np.zeros(self.ncols)
 
     
     def update_importance_history(self):
+
+        """
+        At each iteration update the datframe object that stores the historical feature importance scores.
+       
+        Returns
+        -------
+        Datframe
+       
+        """
 
         padded_history_shadow  = np.full((self.ncols), np.NaN)
         padded_history_x = np.full((self.ncols), np.NaN)
@@ -167,6 +330,16 @@ class BorutaShap:
 
     def store_feature_importance(self):
 
+        """
+        Reshapes the columns in the historical feature importance scores object also adds the mean, median, max, min
+        shadow feature scores.
+       
+        Returns
+        -------
+        Datframe
+       
+        """
+
         self.history_x = pd.DataFrame(data=self.history_x,
                                  columns=self.all_columns)
         
@@ -179,16 +352,38 @@ class BorutaShap:
 
 
     def results_to_csv(self, filename='feature_importance'):
+
+        """
+        Saves the historical feature importance scores to csv.
+
+        Parameters
+        ----------
+        filname : string
+            used as the name for the outputed file.
+       
+        Returns
+        -------
+        comma delimnated file
+       
+        """
         
         features = pd.DataFrame(data={'Features':self.history_x.iloc[1:].columns.values,
         'Average Feature Importance':self.history_x.iloc[1:].mean(axis=0).values,
-        'Standard Deviation Importance':self.history_x.iloc[1:].std(axis=0).values}).sort_values(by='Average Feature Importance',
-                                                                                            ascending=False)
-        self.history_x.iloc[1:].to_csv(filename + 'xxx.csv', index=False)
+        'Standard Deviation Importance':self.history_x.iloc[1:].std(axis=0).values})
+        
+        decision_mapper = self.create_mapping_of_features_to_attribute(maps=['Tentative','Rejected','Accepted', 'Shadow'])
+        features['Decision'] = features['Features'].map(decision_mapper)
+        features = features.sort_values(by='Average Feature Importance',ascending=False)
+
         features.to_csv(filename + '.csv', index=False)
 
 
-    def remove_features_if_rejected_or_accepted(self):
+    def remove_features_if_rejected(self):
+        
+        """
+        At each iteration if a feature has been rejected by the algorithm remove it from the process
+       
+        """
 
         if len(self.features_to_remove) != 0:
             for feature in self.features_to_remove:
@@ -216,6 +411,18 @@ class BorutaShap:
 
     def calculate_hits(self):
 
+        """
+        If a features importance is greater than the maximum importance value of all the random shadow
+        features then we assign it a hit.
+
+        Parameters
+        ----------
+        Percentile : value ranging from 0-1
+            can be used to reduce value of the maximum value of the shadow features making the algorithm
+            more lenient.
+
+        """
+
         shadow_threshold = np.percentile(self.Shadow_feature_import,
                                         self.percentile)
         
@@ -230,20 +437,52 @@ class BorutaShap:
 
 
     def create_shadow_features(self):
+        """
+        Creates the random shadow features by shuffling the existing columns.
 
-            self.X_shadow = self.X.apply(np.random.permutation)
-            self.X_shadow.columns = ['shadow_' + feature for feature in self.X.columns]
-            self.X_boruta = pd.concat([self.X, self.X_shadow], axis = 1)
+        Returns:
+            Datframe with random permutations of the original columns.
+        """
+        self.X_shadow = self.X.apply(np.random.permutation)
+        self.X_shadow.columns = ['shadow_' + feature for feature in self.X.columns]
+        self.X_boruta = pd.concat([self.X, self.X_shadow], axis = 1)
 
 
     @staticmethod
     def calculate_Zscore(array):
+        """
+        Calculates the Z-score of an array
+
+        Parameters
+         ----------
+        array: array_like
+
+        Returns:
+            normalised array
+        """
         mean_value = np.mean(array)
         std_value  = np.std(array)
         return [(element-mean_value)/std_value for element in array]
 
 
     def feature_importance(self):
+
+        """
+        Caculates the feature importances scores of the model
+
+        Parameters
+        ----------
+        importance_measure: string
+            allows the user to choose either the Shap or Gini importance metrics 
+
+        Returns:
+            array of normalized feature importance scores for both the shadow and original features.
+
+        Raise
+        ----------
+            ValueError:
+                If no Importance measure was specified
+        """
 
         if self.importance_measure == 'shap':
 
@@ -254,16 +493,6 @@ class BorutaShap:
             X_feature_import = vals[:len(self.X.columns)]
             Shadow_feature_import = vals[len(self.X_shadow.columns):]
 
-        elif self.importance_measure == 'permutation':
-            
-            X_train, X_test, y_train, y_test = train_test_split(self.X_boruta, self.y, test_size=0.33, random_state=self.random_state)
-            self.model.fit(X=X_train, y=y_train)
-            permuation_importnace_ = permutation_importance(estimator=self.model, X=X_test, y=y_test)
-
-            permuation_importnace_ = self.calculate_Zscore(np.abs(permuation_importnace_.importances_mean))
-            X_feature_import = permuation_importnace_[:len(self.X.columns)]
-            Shadow_feature_import = permuation_importnace_[len(self.X.columns):]
-
         elif self.importance_measure == 'gini':
             
                 feature_importances_ = self.calculate_Zscore(np.abs(self.model.feature_importances_))
@@ -272,12 +501,30 @@ class BorutaShap:
 
         else:
 
-            raise ValueError('No Importance_measure was specified select one of (shap, gini, permutation)')
+            raise ValueError('No Importance_measure was specified select one of (shap, gini)')
 
         return X_feature_import, Shadow_feature_import
 
 
     def get_sample(self):
+
+        """
+        Creates a row wise sample of original dataframe without replacememt
+
+        Parameters
+        ----------
+        dataframe: dataframe
+
+        fraction: value in the range of 0-1 
+
+        Returns:
+            A sampled of the original dataframe
+
+        Raise
+        ----------
+            ValueError:
+                If user input is not in the range of 0-1
+        """
 
         if self.fraction > 1 or self.fraction < 0:
             raise ValueError('Frac must be between 0-1')
@@ -287,6 +534,25 @@ class BorutaShap:
 
 
     def explain(self):
+
+        """
+        The shap package has numerous variants of explainers which use different assumptions depending on the model
+        type this function allows the user to choose explainer
+
+        Parameters
+        ----------
+        model_type: string
+
+        name of model type 
+
+        Returns:
+            shap values
+
+        Raise
+        ----------
+            ValueError:
+                if no model type has been specified tree as default
+        """
 
         if self.model_type == 'tree':
             explainer = shap.TreeExplainer(self.model, approximate=True)
@@ -319,6 +585,11 @@ class BorutaShap:
 
     @staticmethod
     def binomial_H0_test(array, n, p, alternative):
+        """
+        Perform a test that the probability of success is p.
+        This is an exact, two-sided test of the null hypothesis 
+        that the probability of success in a Bernoulli experiment is p
+        """
         return [binom_test(x, n=n, p=p, alternative=alternative) for x in array]
 
     
@@ -337,7 +608,9 @@ class BorutaShap:
 
     @staticmethod
     def bonferoni_corrections(pvals, alpha=0.05, n_tests=None):
-
+        """
+        used to counteract the problem of multiple comparisons.
+        """
         pvals = np.array(pvals)
         
         if n_tests is None:
@@ -352,6 +625,19 @@ class BorutaShap:
 
 
     def test_features(self, iteration):
+
+        """
+        For each feature with an undetermined importance perform a two-sided test of equality
+        with the maximum shadow value to determine if it is statistcally better
+
+        Parameters
+        ----------
+        hits: an array which holds the history of the number times 
+              this feature was better than the maximum shadow 
+
+        Returns:
+            Two arrays of the names of the accepted and rejected columns at that instance
+        """
 
         acceptance_p_values = self.binomial_H0_test(self.hits,
                                                     n=iteration,
@@ -382,8 +668,7 @@ class BorutaShap:
         rejected_features = self.all_columns[rejected_indices]
         accepted_features = self.all_columns[accepted_indices]
 
-        #self.features_to_remove = np.concatenate([rejected_features,
-                                                  #accepted_features])
+ 
         self.features_to_remove = rejected_features
 
 
@@ -392,6 +677,20 @@ class BorutaShap:
 
 
     def TentativeRoughFix(self):
+
+        """
+        Sometimes no matter how many iterations are run a feature may neither be rejected or 
+        accepted. This method is used in this case to make a decision on a tentative feature
+        by comparing its median importance value with the median max shadow value.
+
+        Parameters
+        ----------
+        tentative: an array which holds the names of the tentative attiributes.
+
+        Returns:
+            Two arrays of the names of the final decision of the accepted and rejected columns.
+
+        """
         
         median_tentaive_values = self.history_x[self.tentative].median(axis=0).values
         median_max_shadow = self.history_x['Max_Shadow'].median(axis=0)
@@ -416,102 +715,75 @@ class BorutaShap:
 
 
     def Subset(self, X):
-        X = X.copy()
-        return X[self.accepted]
+        """
+        Returns the subset of desired features
+        """
+        return self.starting_X[self.accepted]
 
 
     @staticmethod
-    def create_color(array, color):
+    def create_list(array, color):
         colors = [color for x in range(len(array))]
         return colors
 
     
-    def box_plot(self):
-        
+    def plot(self, X_rotation=90, X_size=5, y_scale='log'):
+
+        """
+        creates a boxplot of the feature importances
+        """
+        # data from wide to long
         data = self.history_x.iloc[1:]
         data['index'] = data.index
         data = pd.melt(data, id_vars='index', var_name='Methods')
         data.drop(['index'], axis=1, inplace=True)
 
+        self.box_plot(data=data,
+                      X_rotation=X_rotation,
+                      X_size=X_size,
+                      y_scale=y_scale)
+        
+
+    def box_plot(self, data, X_rotation, X_size, y_scale):
+
+        if y_scale=='log':
+            minimum = data['value'].min()
+            if minimum <= 0:
+                data['value'] += abs(minimum) + 0.01
+
         order = data.groupby(by=["Methods"])["value"].mean().sort_values(ascending=False).index
-        
-        my_palette = self.create_color_mapping()
-        
+        my_palette = self.create_mapping_of_features_to_attribute(maps= ['yellow','red','green','blue'])
         
         # Use a color palette
         ax = sns.boxplot(x=data["Methods"], y=data["value"],
                         order=order, palette=my_palette)
-        
-        ax.set_xticklabels(ax.get_xticklabels(),rotation=45, size=5)
+
+        if y_scale == 'log':ax.set(yscale="log")
+        ax.set_xticklabels(ax.get_xticklabels(), rotation=X_rotation, size=X_size)
         ax.set_title('Feature Importance')
         ax.set_ylabel('Z-Score')
         ax.set_xlabel('Features')
         plt.show()
 
 
-    def create_color_mapping(self):
+    def create_mapping_of_features_to_attribute(self, maps = []):
         
         rejected = list(self.rejected)
         tentative = list(self.tentative)
         accepted = list(self.accepted)
         shadow = ['Max_Shadow','Median_Shadow','Min_Shadow','Mean_Shadow']
 
-        tentative_colors = self.create_color(tentative, 'yellow')
-        rejected_colors  = self.create_color(rejected, 'red')
-        accepted_colors  = self.create_color(accepted, 'green')
-        shadow_colors = self.create_color(shadow, 'blue')
+        tentative_map = self.create_list(tentative, maps[0])
+        rejected_map  = self.create_list(rejected, maps[1])
+        accepted_map  = self.create_list(accepted, maps[2])
+        shadow_map = self.create_list(shadow, maps[3])
         
-        values = tentative_colors + rejected_colors + accepted_colors + shadow_colors
+        values = tentative_map + rejected_map + accepted_map + shadow_map
         keys = tentative + rejected + accepted + shadow
         
-        
         return self.to_dictionary(keys, values)
-    
+
+
     @staticmethod
     def to_dictionary(list_one, list_two):
         return dict(zip(list_one, list_two))
-
-
-
-if __name__ == "__main__":
-    
-    from sklearn.model_selection import train_test_split
-    from sklearn.datasets import load_breast_cancer
-
-    current_directory = os.getcwd()
-
-    #X = pd.read_csv(current_directory + '\\Datasets\\Madelon.csv')
-    #y = X.pop('V4')
-    #print(X.columns)
-    #y = X.pop('decision')
-
-    #X, y = shap.datasets.boston()
-    cancer = load_breast_cancer()
-    X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
-    #X.to_csv('cancer.csv',index=False)
-    y = X.pop('target')
-
-
-    Feature_Selector = BorutaShap(model=None, importance_measure='shap',
-                model_type='tree', classification=True, percentile=100,
-                pvalue=0.05)
-
-    Feature_Selector.fit(X=X, y=y, n_trials=50, random_state=0, remove_feature_when_done=True,
-                        sample_fraction=0.1, sample=False)
-
-    Feature_Selector.box_plot()
-    Feature_Selector.TentativeRoughFix()
-    
-
-   
-    Feature_Selector.results_to_csv(filename='plotttt')
-    '''
-    print(Feature_Selector.hits)
-    X = Feature_Selector.Subset(X)
-    model = RandomForestClassifier()
-    scores = cross_val_score(model, X, y, cv=5)
-    print(scores)
-    print(scores.mean())
-    '''
-
-    
