@@ -16,9 +16,13 @@ pip install BorutaShap
 from sklearn.datasets import load_breast_cancer
 import BorutaShap
 
-cancer = load_breast_cancer()
-X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
-y = X.pop('target')
+def load_data():
+  cancer = load_breast_cancer()
+  X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
+  y = X.pop('target')
+  return X, y
+  
+X, y = load_data()
 
 # no model selected default is Random Forest, if classification is False it is a Regression problem
 Feature_Selector = BorutaShap(importance_measure='shap',
