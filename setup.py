@@ -5,7 +5,6 @@ def readme():
         README = f.read()
     return README
 
-
 setup(
     name="BorutaShap",
     version="1.0.0",
