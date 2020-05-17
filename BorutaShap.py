@@ -22,7 +22,7 @@ class BorutaShap:
 
     """
 
-    def __init__(self, model=None, importance_measure='Shap', model_type='tree',
+    def __init__(self, model=None, importance_measure='Shap',
                 classification=True, percentile=100, pvalue=0.05):
 
         """
@@ -34,9 +34,6 @@ class BorutaShap:
 
         importance_measure: String
             Which importance measure too use either Shap or Gini/Gain
-
-        model_type: String
-            which model type will you be using, as SHAP has various explainers for different model types
 
         classification: Boolean
             if true then the problem is either a binary or multiclass problem otherwise if false then it is regression
@@ -57,7 +54,6 @@ class BorutaShap:
         self.pvalue = pvalue
         self.classification = classification
         self.model = model
-        self.model_type = model_type
         self.check_model()
         
 
@@ -539,12 +535,6 @@ class BorutaShap:
         The shap package has numerous variants of explainers which use different assumptions depending on the model
         type this function allows the user to choose explainer
 
-        Parameters
-        ----------
-        model_type: string
-
-        name of model type 
-
         Returns:
             shap values
 
@@ -554,33 +544,26 @@ class BorutaShap:
                 if no model type has been specified tree as default
         """
 
-        if self.model_type == 'tree':
-            explainer = shap.TreeExplainer(self.model, approximate=True)
-            
-            if self.sample:
+      
+        explainer = shap.TreeExplainer(self.model, approximate=True)
+        
+        if self.sample:
 
-                if self.classification:
-                    # for some reason shap returns values wraped in a list of length 1
-                    self.shap_values = np.array(explainer.shap_values(self.get_sample())).sum(axis=0)
+            if self.classification:
+                # for some reason shap returns values wraped in a list of length 1
+                self.shap_values = np.array(explainer.shap_values(self.get_sample())).sum(axis=0)
 
-                else:
-                    self.shap_values = explainer.shap_values(self.get_sample())
             else:
-
-                if self.classification:
-                    # for some reason shap returns values wraped in a list of length 1
-                    self.shap_values = np.array(explainer.shap_values(self.get_sample())).sum(axis=0)
-                else:
-                    self.shap_values = explainer.shap_values(self.X_boruta)
-
-            
-
-        elif self.model_type == 'linear':
-            explainer = shap.LinearExplainer(self.model, self.X_boruta, feature_dependence="independent")
-            self.shap_values = explainer.shap_values(self.X_boruta)
-
+                self.shap_values = explainer.shap_values(self.get_sample())
+        
         else:
-            raise AttributeError("Model Type has not been Selected (linear or tree)")
+            
+            if self.classification:
+                # for some reason shap returns values wraped in a list of length 1
+                self.shap_values = np.array(explainer.shap_values(self.get_sample())).sum(axis=0)
+            
+            else:
+                self.shap_values = explainer.shap_values(self.X_boruta)
 
 
     @staticmethod
