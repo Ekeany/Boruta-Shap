@@ -1,7 +1,6 @@
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.datasets import load_breast_cancer, load_boston
+from sklearn.datasets import load_wine, load_boston
 from statsmodels.stats.multitest import multipletests
-from sklearn.model_selection import cross_val_score
 from scipy.stats import binom_test
 import matplotlib.pyplot as plt
 from tqdm import tqdm
@@ -831,8 +830,8 @@ def load_data(data_type='classification'):
     data_type = data_type.lower()
 
     if data_type == 'classification':
-        cancer = load_breast_cancer()
-        X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
+        wine = load_wine()
+        X = pd.DataFrame(np.c_[wine['data'], wine['target']], columns = np.append(wine['feature_names'], ['target']))
         y = X.pop('target')
 
     elif data_type == 'regression':
