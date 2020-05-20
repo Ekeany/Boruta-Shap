@@ -545,7 +545,7 @@ class BorutaShap:
         """
 
       
-        explainer = shap.TreeExplainer(self.model, approximate=True)
+        explainer = shap.TreeExplainer(self.model, feature_perturbation = "tree_path_dependent")
         
         if self.sample:
 
@@ -560,7 +560,7 @@ class BorutaShap:
             
             if self.classification:
                 # for some reason shap returns values wraped in a list of length 1
-                self.shap_values = np.array(explainer.shap_values(self.get_sample())).sum(axis=0)
+                self.shap_values = np.array(explainer.shap_values(self.X_boruta)).sum(axis=0)
             
             else:
                 self.shap_values = explainer.shap_values(self.X_boruta)
@@ -727,7 +727,7 @@ class BorutaShap:
 
 
     
-    def plot(self, X_rotation=90, X_size=5, figsize=(12,8),
+    def plot(self, X_rotation=90, X_size=8, figsize=(12,8),
             y_scale='log', which_features='all'):
 
         """
