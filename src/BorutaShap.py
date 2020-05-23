@@ -1,12 +1,16 @@
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.datasets import load_wine, load_boston
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, IsolationForest
+from sklearn.datasets import load_breast_cancer, load_boston
 from statsmodels.stats.multitest import multipletests
-from scipy.stats import binom_test
+from sklearn.preprocessing import MinMaxScaler
+from sklearn.cluster import KMeans
+from scipy.sparse import issparse
+from scipy.stats import binom_test, ks_2samp
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 import random
 import pandas as pd
 import numpy as np
+from numpy.random import choice
 import seaborn as sns
 import shap
 import os
@@ -169,9 +173,18 @@ class BorutaShap:
         
         else:
             pass
+
+    @staticmethod
+    def check_sample_string(sample):
+
+        if isinstance(sample, str) is False:
+            raise AttributeError("the Sample parameter must be either 'None', 'kmeans' or 'isolation' not set as" + str(sample))
+
+        else:
+            return sample.lower()
     
 
-    def fit(self, X, y, n_trials = 20, random_state=0, sample=False, sample_fraction=0.25):
+    def fit(self, X, y, n_trials = 20, random_state=0, sample='None', sample_fraction=0.25, k=100):
 
         """
         The main body of the program this method it computes the following
@@ -224,11 +237,11 @@ class BorutaShap:
         """
         
         np.random.seed(random_state)
+        self.k = k
         self.starting_X = X.copy()
         self.X = X.copy()
         self.y = y.copy()
         self.n_trials = n_trials
-        self.sample = sample
         self.fraction = sample_fraction
         self.random_state = random_state
         self.ncols = self.X.shape[1]
@@ -238,11 +251,14 @@ class BorutaShap:
         
         self.check_X()
         self.check_missing_values()
+        self.sample = self.check_sample_string(sample)
 
         self.features_to_remove = []
         self.hits  = np.zeros(self.ncols)
         self.order = self.create_mapping_between_cols_and_indices()
         self.create_importance_history()
+
+        if self.sample == 'isolation': self.preds = self.isolation_forest(self.X)
 
         for trial in tqdm(range(self.n_trials)):
             
@@ -529,6 +545,96 @@ class BorutaShap:
             return self.X_boruta.sample(frac=self.fraction, replace=False, random_state=self.random_state)
 
 
+    @staticmethod
+    def isolation_forest(X):
+        clf = IsolationForest().fit(X)
+        preds = clf.score_samples(X)
+        return preds
+
+
+    @staticmethod
+    def get_5_percent(num):
+        return round(5  / 100 * num)
+
+
+    def get_5_percent_splits(self, length):
+        five_percent = self.get_5_percent(length)
+        return np.arange(five_percent,length,five_percent)
+
+
+    def find_sample(self):
+    
+        loop = True
+        iteration = 0
+        size = self.get_5_percent_splits(self.X.shape[0])
+        element = 1
+        while loop:
+            
+            sample_indices = choice(np.arange(self.preds.size),  size=size[element], replace=False)
+            sample = np.take(self.preds, sample_indices)
+            if ks_2samp(self.preds, sample).pvalue > 0.95:
+                break
+            
+            if iteration == 20:
+                element  += 1
+                iteration = 0
+                
+        
+        return self.X_boruta.iloc[sample_indices]
+
+
+    @staticmethod
+    def Scaler(X):
+        X = X.copy()
+        scaler =  MinMaxScaler()
+        scaled_X = scaler.fit_transform(X)
+        return scaled_X
+
+ 
+    def kmeans(self, X, k, round_values=True):
+
+        """ Summarize a dataset with k mean samples weighted by the number of data points they
+        each represent.
+        Parameters
+        ----------
+        X : numpy.array or pandas.DataFrame or any scipy.sparse matrix
+            Matrix of data samples to summarize (# samples x # features)
+        k : int
+            Number of means to use for approximation.
+        round_values : bool
+            For all i, round the ith dimension of each mean sample to match the nearest value
+            from X[:,i]. This ensures discrete features always get a valid value.
+        Returns
+        
+        """
+
+        X = X.copy()
+        group_names = [str(i) for i in range(X.shape[1])]
+        if str(type(X)).endswith("'pandas.core.frame.DataFrame'>"):
+            group_names = X.columns
+            X = self.Scaler(X.values)
+        
+        kmeans = KMeans(n_clusters=k, random_state=0).fit(X)
+
+        if round_values:
+            for i in range(k):
+                for j in range(X.shape[1]):
+                    xj = X[:,j].toarray().flatten() if issparse(X) else X[:, j]
+                    ind = np.argmin(np.abs(xj - kmeans.cluster_centers_[i,j]))
+                    kmeans.cluster_centers_[i,j] = X[ind,j]
+                    
+        return kmeans.cluster_centers_, group_names, 1.0*np.bincount(kmeans.labels_)
+
+
+    @staticmethod
+    def create_sahadow_features(df):
+        df = df.copy()
+        df_shadow = df.apply(np.random.permutation)
+        df_shadow.columns = ['shadow_' + feature for feature in df.columns]
+        df_boruta = pd.concat([df, df_shadow], axis = 1)
+        return df_boruta
+
+
     def explain(self):
 
         """
@@ -547,16 +653,32 @@ class BorutaShap:
       
         explainer = shap.TreeExplainer(self.model, approximate=True, feature_perturbation = "tree_path_dependent")
         
-        if self.sample:
+        if self.sample == 'kmeans':
+            
+            samples, cols , weights = self.kmeans(self.X , self.k, round_values=True)
+            samples = pd.DataFrame(samples, columns=cols)
+            samples = self.create_sahadow_features(samples)
 
             if self.classification:
                 # for some reason shap returns values wraped in a list of length 1
-                self.shap_values = np.array(explainer.shap_values(self.get_sample())).sum(axis=0)
+                self.shap_values = np.array(explainer.shap_values(samples)).sum(axis=0)
+                self.shap_values = self.shap_values * weights.reshape(-1, 1)
+            
+            else:
+                self.shap_values = explainer.shap_values(samples)
+                self.shap_values = self.shap_values * weights.reshape(-1, 1)
+
+
+        elif self.sample == 'isolation':
+            
+            if self.classification:
+                # for some reason shap returns values wraped in a list of length 1
+                self.shap_values = np.array(explainer.shap_values(self.find_sample())).sum(axis=0)
 
             else:
-                self.shap_values = explainer.shap_values(self.get_sample())
-        
-        else:
+                self.shap_values = explainer.shap_values(self.find_sample())
+            
+        elif self.sample == 'none':
             
             if self.classification:
                 # for some reason shap returns values wraped in a list of length 1
@@ -564,6 +686,9 @@ class BorutaShap:
             
             else:
                 self.shap_values = explainer.shap_values(self.X_boruta)
+
+        else:
+            raise ValueError( str(self.sample) + " is not a valid parameter sample value must either be 'None', 'kmeans', 'isolation'")
 
 
     @staticmethod
@@ -830,8 +955,8 @@ def load_data(data_type='classification'):
     data_type = data_type.lower()
 
     if data_type == 'classification':
-        wine = load_wine()
-        X = pd.DataFrame(np.c_[wine['data'], wine['target']], columns = np.append(wine['feature_names'], ['target']))
+        cancer = load_breast_cancer()
+        X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
         y = X.pop('target')
 
     elif data_type == 'regression':
@@ -844,3 +969,15 @@ def load_data(data_type='classification'):
   
 
     return X, y
+
+
+
+if __name__ == "__main__":
+
+    X,y = load_data()
+
+    Feature_Selector = BorutaShap(importance_measure='shap',
+                              classification=True)
+
+    Feature_Selector.fit(X=X, y=y, n_trials=100, random_state=0, sample='isolation', k=5)
+    Feature_Selector.plot()
