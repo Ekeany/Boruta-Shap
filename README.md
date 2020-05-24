@@ -33,33 +33,70 @@ pip install BorutaShap
 ## Usage
 ### Using Shap and Basic Random Forest 
 ```python
-from sklearn.datasets import load_breast_cancer
-import BorutaShap
-
-def load_data():
-  cancer = load_breast_cancer()
-  X = pd.DataFrame(np.c_[cancer['data'], cancer['target']], columns = np.append(cancer['feature_names'], ['target']))
-  y = X.pop('target')
-  return X, y
+from BorutaShap import BorutaShap, load_data
   
-X, y = load_data()
+X, y = load_data(data_type='regression')
+X.head()
+```
+![](images/BostonHead.PNG)
 
-# no model selected default is Random Forest, if classification is False it is a Regression problem
+```python
+# no model selected default is Random Forest, if classification is True it is a Classification problem
 Feature_Selector = BorutaShap(importance_measure='shap',
-                              classification=True)
+                              classification=False)
 
-Feature_Selector.fit(X=X, y=y, n_trials=50, random_state=0)
+Feature_Selector.fit(X=X, y=y, n_trials=100, random_state=0)
+```
+![](images/BostonOutput.PNG)
 
+
+```python
 # Returns Boxplot of features
-Feature_Selector.plot(which_features='rejected')
-# If not all features have been accepted or rejected this function makes a
-# decision by comparing median values of the max shadow feature and each tentative feature
-Feature_Selector.TentativeRoughFix()
+Feature_Selector.plot(which_features='all')
+```
+![](images/Bostonplot.PNG)
+
+```python
 # Returns a subset of the original data with the selected features
 subset = Feature_Selector.Subset()
 ```
+![](images/bostonsubset.PNG)
 
 
+### Using BorutaShap with another model XGBoost
+
+```python
+from BorutaShap import BorutaShap, load_data
+from xgboost import XGBClassifier
+
+X, y = load_data(data_type='classification')
+X.head()
+```
+![](images/binaryhead.PNG)
+
+```python
+model = XGBClassifier()
+
+# if classification is False it is a Regression problem
+Feature_Selector = BorutaShap(model=model,
+                              importance_measure='shap',
+                              classification=True)
+
+Feature_Selector.fit(X=X, y=y, n_trials=100, random_state=0)
+```
+![](images/binaryoutput.PNG)
+
+```python
+# Returns Boxplot of features
+Feature_Selector.plot(which_features='all')
+```
+![](images/binaryplot.PNG)
+
+```python
+# Returns a subset of the original data with the selected features
+subset = Feature_Selector.Subset()
+```
+![](images/binarysubset.PNG)
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
