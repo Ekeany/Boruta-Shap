@@ -14,7 +14,7 @@ from numpy.random import choice
 import seaborn as sns
 import shap
 import os
-from sklearn.model_selection import cross_val_score
+import re
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -82,7 +82,13 @@ class BorutaShap:
 
         check_fit = hasattr(self.model, 'fit')
         check_predict_proba = hasattr(self.model, 'predict')
-        check_feature_importance = hasattr(self.model, 'feature_importances_')
+
+        try:
+            check_feature_importance = hasattr(self.model, 'feature_importances_')
+
+        except:
+            check_feature_importance = True
+
 
         if self.model is None:
 
@@ -260,7 +266,12 @@ class BorutaShap:
                 break
 
             else:
-                self.model.fit(self.X_boruta, self.y)
+
+                try:
+                    self.model.fit(self.X_boruta, self.y, verbose=False)
+                except:
+                    self.model.fit(self.X_boruta, self.y)
+
                 self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
                 self.update_importance_history()
                 self.hits += self.calculate_hits()
@@ -510,6 +521,9 @@ class BorutaShap:
 
     @staticmethod
     def isolation_forest(X):
+        '''
+        fits isloation forest to the dataset and gives an anomally score to every sample
+        '''
         clf = IsolationForest().fit(X)
         preds = clf.score_samples(X)
         return preds
@@ -521,12 +535,18 @@ class BorutaShap:
 
 
     def get_5_percent_splits(self, length):
+        '''
+        splits dataframe into 5% intervals
+        '''
         five_percent = self.get_5_percent(length)
         return np.arange(five_percent,length,five_percent)
 
 
     def find_sample(self):
-    
+        '''
+        Finds a sample by comparing the distributions of the anomally scores between the sample and the original 
+        distribution using the KS-test. Starts of a 5% howver will increase to 10% and then 15% etc. if a significant sample can not be found
+        '''
         loop = True
         iteration = 0
         size = self.get_5_percent_splits(self.X.shape[0])
@@ -735,7 +755,12 @@ class BorutaShap:
         data = data.copy()
         return data.loc[(data[column] == value) | (data[column] == 'Shadow')]
 
-    
+
+    @staticmethod
+    def hasNumbers(inputString):
+        return any(char.isdigit() for char in inputString)
+
+
     @staticmethod
     def check_if_which_features_is_correct(my_string):
         
@@ -779,6 +804,7 @@ class BorutaShap:
         decision_mapper = self.create_mapping_of_features_to_attribute(maps=['Tentative','Rejected','Accepted', 'Shadow'])
         data['Decision'] = data['Methods'].map(decision_mapper)
         data.drop(['index'], axis=1, inplace=True)
+
 
         options = { 'accepted' : self.filter_data(data,'Decision', 'Accepted'),
                     'tentative': self.filter_data(data,'Decision', 'Tentative'),
@@ -865,6 +891,5 @@ def load_data(data_type='classification'):
   
 
     return X, y
-
 
 
