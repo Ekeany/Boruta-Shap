@@ -590,7 +590,9 @@ class BorutaShap:
             
             if self.classification:
                 # for some reason shap returns values wraped in a list of length 1
-                self.shap_values = np.array(explainer.shap_values(self.find_sample())).sum(axis=0)
+                
+                self.shap_values = np.array(explainer.shap_values(self.find_sample()))
+                if len(self.shap_values.shape) == 3: self.shap_values = self.shap_values.sum(axis=0)
 
             else:
                 self.shap_values = explainer.shap_values(self.find_sample())
@@ -599,7 +601,8 @@ class BorutaShap:
             
             if self.classification:
                 # for some reason shap returns values wraped in a list of length 1
-                self.shap_values = np.array(explainer.shap_values(self.X_boruta)).sum(axis=0)
+                self.shap_values = np.array(explainer.shap_values(self.X_boruta))
+                if len(self.shap_values.shape) == 3: self.shap_values = self.shap_values.sum(axis=0)
             
             else:
                 self.shap_values = explainer.shap_values(self.X_boruta)
@@ -891,5 +894,3 @@ def load_data(data_type='classification'):
   
 
     return X, y
-
-
