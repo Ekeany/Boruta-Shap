@@ -1,7 +1,7 @@
 # Boruta-Shap
 BorutaShap is a wrapper feature selection method which combines both the Boruta feature selection algorithm with shapley values. This combination has proven to out perform the original Permutation Importance method in both speed, and the quality of the feature subset produced. Not only does this algorithm provide a better subset of features, but it can also simultaneously provide the most accurate and consistent global feature rankings which can be used for model inference too. Unlike the orginal R package, which limits the user to a Random Forest model, BorutaShap allows the user to choose any Tree Based learner as the base model in the feature selection process.
 
-Despite BorutaShap's runtime improvments the SHAP TreeExplainer scales linearly with the number of observations making it's use cumbersome for large datasets. To combat this, BorutaShap includes a sampling procedure were a new sub sample of the data can be specifed at each iteration of the algorithm. From experiments, any sub sample greater than 20% with over 30 iterations produced an identical feature subset when compared to using the entire data set. Even with these improvments the user still might want a faster solution so BorutaShap has included an option to use the mean decrease in gini impurity. This importance measure is independent of the size dataset as it uses the tree's structure to compute a global feature ranking making it much faster than SHAP at larger datasets. Although this metric returns somewhat comparable feature subsets, it is not a reliable measure of global feature importance in spite of it's wide spread use. Thus, I would recommend to using the SHAP metric whenever possible.
+Despite BorutaShap's runtime improvments the SHAP TreeExplainer scales linearly with the number of observations making it's use cumbersome for large datasets. To combat this, BorutaShap includes a sampling procedure which uses the smallest possible subsample of the data availble at each iteration of the algorithm. It finds this sample by comparing the distributions produced by an isolation forest of the sample and the data using ks-test. From experiments, this procedure can reduce the run time up to 80% while still creating a valid approximation of the entire data set. Even with these improvments the user still might want a faster solution so BorutaShap has included an option to use the mean decrease in gini impurity. This importance measure is independent of the size dataset as it uses the tree's structure to compute a global feature ranking making it much faster than SHAP at larger datasets. Although this metric returns somewhat comparable feature subsets, it is not a reliable measure of global feature importance in spite of it's wide spread use. Thus, I would recommend to using the SHAP metric whenever possible.
 
 ### Algorithm
 
@@ -31,6 +31,8 @@ pip install BorutaShap
 
 
 ## Usage
+For more use cases such as alternative models, sampling or changing the importance metric please view the notebooks in the example folder above.
+
 ### Using Shap and Basic Random Forest 
 ```python
 from BorutaShap import BorutaShap, load_data
@@ -38,7 +40,7 @@ from BorutaShap import BorutaShap, load_data
 X, y = load_data(data_type='regression')
 X.head()
 ```
-![](images/BostonHead.PNG)
+<img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/BostonHead.PNG?raw=true" height="203" width="722">
 
 ```python
 # no model selected default is Random Forest, if classification is True it is a Classification problem
@@ -47,20 +49,21 @@ Feature_Selector = BorutaShap(importance_measure='shap',
 
 Feature_Selector.fit(X=X, y=y, n_trials=100, random_state=0)
 ```
-![](images/BostonOutput.PNG)
 
+<img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/BostonOutput.PNG?raw=true">
 
 ```python
 # Returns Boxplot of features
 Feature_Selector.plot(which_features='all')
 ```
-![](images/Bostonplot.PNG)
+<img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/Bostonplot.PNG?raw=true" height="530" width="699">
 
 ```python
 # Returns a subset of the original data with the selected features
 subset = Feature_Selector.Subset()
 ```
-![](images/bostonsubset.PNG)
+
+<img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/bostonsubset.PNG?raw=true" height="194" width="465">
 
 
 ### Using BorutaShap with another model XGBoost
@@ -72,7 +75,8 @@ from xgboost import XGBClassifier
 X, y = load_data(data_type='classification')
 X.head()
 ```
-![](images/binaryhead.PNG)
+
+<img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/binaryhead.PNG?raw=true">
 
 ```python
 model = XGBClassifier()
@@ -84,24 +88,23 @@ Feature_Selector = BorutaShap(model=model,
 
 Feature_Selector.fit(X=X, y=y, n_trials=100, random_state=0)
 ```
-![](images/binaryoutput.PNG)
+<img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/binaryoutput.PNG?raw=true">
 
 ```python
 # Returns Boxplot of features
 Feature_Selector.plot(which_features='all')
 ```
-![](images/binaryplot.PNG)
+
+<img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/binaryplot.PNG?raw=true" height="565" width="671">
 
 ```python
 # Returns a subset of the original data with the selected features
 subset = Feature_Selector.Subset()
 ```
-![](images/binarysubset.PNG)
+<img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/binarysubset.PNG?raw=true">
 
 ## Contributing
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
-
-Please make sure to update tests as appropriate.
 
 ## License
 [MIT](https://choosealicense.com/licenses/mit/)
