@@ -1,3 +1,5 @@
+<a href="https://badge.fury.io/py/BorutaShap"><img src="https://badge.fury.io/py/BorutaShap.svg" alt="PyPI version" height="18"></a>
+
 # Boruta-Shap
 BorutaShap is a wrapper feature selection method which combines both the Boruta feature selection algorithm with shapley values. This combination has proven to out perform the original Permutation Importance method in both speed, and the quality of the feature subset produced. Not only does this algorithm provide a better subset of features, but it can also simultaneously provide the most accurate and consistent global feature rankings which can be used for model inference too. Unlike the orginal R package, which limits the user to a Random Forest model, BorutaShap allows the user to choose any Tree Based learner as the base model in the feature selection process.
 
@@ -31,7 +33,7 @@ pip install BorutaShap
 
 
 ## Usage
-For more use cases such as alternative models, sampling or changing the importance metric please view the notebooks in the example folder above.
+For more use cases such as alternative models, sampling or changing the importance metric please view the notebooks [here](https://github.com/Ekeany/Boruta-Shap/tree/master/Examples).
 
 ### Using Shap and Basic Random Forest 
 ```python
