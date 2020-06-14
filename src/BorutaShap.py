@@ -755,7 +755,7 @@ class BorutaShap:
         Returns the subset of desired features
         """
         if tentative:
-            return self.starting_X[self.accepted + self.tentative.tolist()]
+            return self.starting_X[self.accepted + self.tentative]
         else:
             return self.starting_X[self.accepted]
 
