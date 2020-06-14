@@ -15,6 +15,7 @@ import seaborn as sns
 import shap
 import os
 import re
+from catboost import CatBoostClassifier, CatBoostRegressor, Pool
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -266,11 +267,14 @@ class BorutaShap:
                 break
 
             else:
+                if isinstance(self.model,CatBoostClassifier) or isinstance(self.model,CatBoostRegressor):
+                    self.model.fit(self.X_boruta, self.y, cat_features = self.X_categorical)
+                else:
 
-                try:
-                    self.model.fit(self.X_boruta, self.y, verbose=False)
-                except:
-                    self.model.fit(self.X_boruta, self.y)
+                    try:
+                        self.model.fit(self.X_boruta, self.y, verbose=False)
+                    except:
+                        self.model.fit(self.X_boruta, self.y)
 
                 self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
                 self.update_importance_history()
@@ -459,6 +463,8 @@ class BorutaShap:
         self.X_shadow = self.X.apply(np.random.permutation)
         self.X_shadow.columns = ['shadow_' + feature for feature in self.X.columns]
         self.X_boruta = pd.concat([self.X, self.X_shadow], axis = 1)
+        col_types = self.X_boruta.dtypes
+        self.X_categorical = list(col_types[(col_types=='category' ) | (col_types=='object')].index)
 
 
     @staticmethod
@@ -605,7 +611,10 @@ class BorutaShap:
                 if len(self.shap_values.shape) == 3: self.shap_values = self.shap_values.sum(axis=0)
             
             else:
-                self.shap_values = explainer.shap_values(self.X_boruta)
+                if isinstance(self.model,CatBoostClassifier) or isinstance(self.model,CatBoostRegressor):
+                    self.shap_values = explainer.shap_values(Pool(self.X_boruta, cat_features=self.X_categorical))
+                else:
+                    self.shap_values = explainer.shap_values(self.X_boruta)
 
  
 
@@ -741,12 +750,14 @@ class BorutaShap:
         self.accepted = self.accepted + newly_accepted.tolist()
 
 
-    def Subset(self):
+    def Subset(self, tentative=False):
         """
         Returns the subset of desired features
         """
-        return self.starting_X[self.accepted]
-
+        if tentative:
+            return self.starting_X[self.accepted + self.tentative.tolist()]
+        else:
+            return self.starting_X[self.accepted]
 
     @staticmethod
     def create_list(array, color):
