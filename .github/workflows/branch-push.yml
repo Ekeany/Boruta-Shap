@@ -1,0 +1,37 @@
+name: Lint and Test
+on: [push]
+
+jobs:
+  lint:
+    name: Lint Source Code
+    runs-on: ubuntu-latest
+    steps:
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: "3.7"
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Flake8
+        run: pip install flake8
+#       Uncomment these lines to add linting
+#      - name: Lint
+#        run: python -m flake8 src
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+      strategy:
+        matrix:
+          python: [3.6, 3.7, 3.8]
+
+      steps:
+        - uses: actions/checkout@v2
+        - name: Setup Python
+          uses: actions/setup-python@v2
+          with:
+            python-version: ${{ matrix.python }}
+        - name: Install Tox and any other packages
+          run: pip install tox
+        - name: Run Tox
+          # Run tox using the version of Python in `PATH`
+          run: tox -e py
