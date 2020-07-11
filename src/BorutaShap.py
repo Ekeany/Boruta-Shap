@@ -500,7 +500,7 @@ class BorutaShap:
         if self.importance_measure == 'shap':
 
             self.explain()
-            vals = np.abs(self.shap_values).mean(0)
+            vals = self.shap_values
             vals = self.calculate_Zscore(vals)
 
             X_feature_import = vals[:len(self.X.columns)]
@@ -588,27 +588,55 @@ class BorutaShap:
 
         if self.sample:
             
+
             if self.classification:
                 # for some reason shap returns values wraped in a list of length 1
                 
                 self.shap_values = np.array(explainer.shap_values(self.find_sample()))
-                if len(self.shap_values.shape) == 3: self.shap_values = self.shap_values.sum(axis=0)
+                if isinstance(self.shap_values, list):
+
+                    class_inds = range(len(self.shap_values))
+                    shap_imp = np.zeros(self.shap_values[0].shape[1])
+                    for i, ind in enumerate(class_inds):
+                        shap_imp += np.abs(self.shap_values[ind]).mean(0)
+                    self.shap_values /= len(self.shap_values)
+
+                elif len(self.shap_values.shape) == 3:
+                    self.shap_values = np.abs(self.shap_values).sum(axis=0)
+                    self.shap_values = self.shap_values.mean(0)
+                
+                else:
+                    self.shap_values = np.abs(self.shap_values).mean(0)
 
             else:
                 self.shap_values = explainer.shap_values(self.find_sample())
+                self.shap_values = np.abs(self.shap_values).mean(0)
             
         else:
             
             if self.classification:
                 # for some reason shap returns values wraped in a list of length 1
                 self.shap_values = np.array(explainer.shap_values(self.X_boruta))
-                if len(self.shap_values.shape) == 3: self.shap_values = self.shap_values.sum(axis=0)
+                if isinstance(self.shap_values, list):
+
+                    class_inds = range(len(self.shap_values))
+                    shap_imp = np.zeros(self.shap_values[0].shape[1])
+                    for i, ind in enumerate(class_inds):
+                        shap_imp += np.abs(self.shap_values[ind]).mean(0)
+                    self.shap_values /= len(self.shap_values)
+                
+                elif len(self.shap_values.shape) == 3:
+                    self.shap_values = np.abs(self.shap_values).sum(axis=0)
+                    self.shap_values = self.shap_values.mean(0)
+
+                else:
+                    self.shap_values = np.abs(self.shap_values).mean(0)
             
             else:
                 self.shap_values = explainer.shap_values(self.X_boruta)
+                self.shap_values = np.abs(self.shap_values).mean(0)
 
  
-
 
     @staticmethod
     def binomial_H0_test(array, n, p, alternative):
@@ -777,7 +805,7 @@ class BorutaShap:
 
     
     def plot(self, X_rotation=90, X_size=8, figsize=(12,8),
-            y_scale='log', which_features='all'):
+            y_scale='log', which_features='all', display=True):
 
         """
         creates a boxplot of the feature importances
@@ -797,6 +825,9 @@ class BorutaShap:
         which_features: string
             Despite efforts if the number of columns is large the plot becomes cluttered so this parameter allows you to 
             select subsets of the features like the accepted, rejected or tentative features default is all.
+
+        Display: Boolean
+        controls if the output is displayed or not, set to false when running test scripts
 
         """
         # data from wide to long
@@ -823,6 +854,10 @@ class BorutaShap:
                       X_size=X_size,
                       y_scale=y_scale,
                       figsize=figsize)
+        if display:
+            plt.show()
+        else:
+            plt.close()
         
 
     def box_plot(self, data, X_rotation, X_size, y_scale, figsize):
@@ -845,7 +880,6 @@ class BorutaShap:
         ax.set_title('Feature Importance')
         ax.set_ylabel('Z-Score')
         ax.set_xlabel('Features')
-        plt.show()
 
 
     def create_mapping_of_features_to_attribute(self, maps = []):
@@ -871,6 +905,7 @@ class BorutaShap:
         return dict(zip(list_one, list_two))
 
 
+
 def load_data(data_type='classification'):
 
     """
@@ -894,3 +929,8 @@ def load_data(data_type='classification'):
   
 
     return X, y
+
+
+    
+
+
