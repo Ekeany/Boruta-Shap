@@ -262,15 +262,23 @@ class BorutaShap:
             self.columns = self.X.columns.to_numpy()
             self.create_shadow_features()
 
+            # early stopping
             if self.X.shape[1] == 0:
                 break
 
             else:
 
-                try:
-                    self.model.fit(self.X_boruta, self.y, verbose=False)
-                except:
-                    self.model.fit(self.X_boruta, self.y)
+                # catboost needs extra parameters
+                if 'catboost' in str(type(self.model)).lower():
+                    self.model.fit(self.X_boruta, self.y, cat_features = self.X_categorical,  verbose=False)
+
+                else:
+
+                    try:
+                        self.model.fit(self.X_boruta, self.y, verbose=False)
+                    except:
+                        self.model.fit(self.X_boruta, self.y)
+
 
                 self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
                 self.update_importance_history()
@@ -459,6 +467,9 @@ class BorutaShap:
         self.X_shadow = self.X.apply(np.random.permutation)
         self.X_shadow.columns = ['shadow_' + feature for feature in self.X.columns]
         self.X_boruta = pd.concat([self.X, self.X_shadow], axis = 1)
+        
+        col_types = self.X_boruta.dtypes
+        self.X_categorical = list(col_types[(col_types=='category' ) | (col_types=='object')].index)
 
 
     @staticmethod
@@ -769,11 +780,15 @@ class BorutaShap:
         self.accepted = self.accepted + newly_accepted.tolist()
 
 
-    def Subset(self):
+
+    def Subset(self, tentative=False):
         """
         Returns the subset of desired features
         """
-        return self.starting_X[self.accepted]
+        if tentative:
+            return self.starting_X[self.accepted + self.tentative.tolist()]
+        else:
+            return self.starting_X[self.accepted]
 
 
     @staticmethod
@@ -929,8 +944,3 @@ def load_data(data_type='classification'):
   
 
     return X, y
-
-
-    
-
-
