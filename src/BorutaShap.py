@@ -594,7 +594,7 @@ class BorutaShap:
         """
 
       
-        explainer = shap.TreeExplainer(self.model, approximate=True, feature_perturbation = "tree_path_dependent")
+        explainer = shap.TreeExplainer(self.model, feature_perturbation = "tree_path_dependent")
         
 
         if self.sample:
