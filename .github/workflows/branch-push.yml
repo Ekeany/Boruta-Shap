@@ -1,5 +1,8 @@
 name: Lint and Test
-on: [push]
+on:
+  pull_requests:
+  push:
+    branches: [master]
 
 jobs:
   lint:
