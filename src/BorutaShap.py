@@ -1,6 +1,7 @@
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, IsolationForest
 from sklearn.datasets import load_breast_cancer, load_boston
 from statsmodels.stats.multitest import multipletests
+from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.cluster import KMeans
 from scipy.sparse import issparse
@@ -181,8 +182,70 @@ class BorutaShap:
         else:
             pass
 
+
+
+    def Check_if_chose_train_or_test_and_train_model(self):
+
+        """
+        Decides to fit the model to either the training data or the test/unseen data a great discussion on the 
+        differences can be found here.
+
+        https://compstat-lmu.github.io/iml_methods_limitations/pfi-data.html#introduction-to-test-vs.training-data
+
+        """
+
+        if self.train_or_test.lower() == 'test':
+            # keeping the same naming convenetion as to not add complexit later on
+            self.X_boruta_train, self.X_boruta, self.y_train, self.y_test = train_test_split(self.X_boruta,
+                                                                                            self.y,
+                                                                                            test_size=0.3,
+                                                                                            random_state=self.random_state)
+            self.Train_model(self.X_boruta_train, self.y_train)
+
+        elif self.train_or_test.lower() == 'train':
+            # model will be trained and evaluated on the same data
+            self.Train_model(self.X_boruta, self.y)
+            
+        else:
+            raise ValueError('The train_or_test parameter can only be "train" or "test"')
+
+
+
+    def Train_model(self, X, y):
+        
+        """
+        Trains Model also checks to see if the model is an instance of catboost as it needs extra parameters
+        also the try except is for models with a verbose statement
+
+        Parameters
+        ----------
+        X: Dataframe
+            A pandas dataframe of the features.
+
+        y: Series/ndarray
+            A pandas series or numpy ndarray of the target
+
+        Returns
+        ----------
+        fitted model object
+
+        """
+        
+        if 'catboost' in str(type(self.model)).lower():
+            self.model.fit(X, y, cat_features = self.X_categorical,  verbose=False)
+
+        else:
+            
+            try:
+                self.model.fit(X, y, verbose=False)
+            
+            except:
+                self.model.fit(X, y)
+
+
+    
  
-    def fit(self, X, y, n_trials = 20, random_state=0, sample=False):
+    def fit(self, X, y, n_trials = 20, random_state=0, sample=False, train_or_test = 'test'):
 
         """
         The main body of the program this method it computes the following
@@ -231,6 +294,10 @@ class BorutaShap:
         sample_fraction: float
             The sample fraction of the original data used in calculating the feature importance values only
             used if Sample==True.
+
+        train_or_test: string
+            Decides whether the feature improtance should be calculated on out of sample data see the dicussion here.
+            https://compstat-lmu.github.io/iml_methods_limitations/pfi-data.html#introduction-to-test-vs.training-data
        
         """
         
@@ -248,6 +315,7 @@ class BorutaShap:
         self.check_X()
         self.check_missing_values()
         self.sample = sample
+        self.train_or_test = train_or_test
 
         self.features_to_remove = []
         self.hits  = np.zeros(self.ncols)
@@ -268,17 +336,7 @@ class BorutaShap:
 
             else:
 
-                # catboost needs extra parameters
-                if 'catboost' in str(type(self.model)).lower():
-                    self.model.fit(self.X_boruta, self.y, cat_features = self.X_categorical,  verbose=False)
-
-                else:
-
-                    try:
-                        self.model.fit(self.X_boruta, self.y, verbose=False)
-                    except:
-                        self.model.fit(self.X_boruta, self.y)
-
+                self.Check_if_chose_train_or_test_and_train_model()
 
                 self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
                 self.update_importance_history()
@@ -551,6 +609,7 @@ class BorutaShap:
         '''
         five_percent = self.get_5_percent(length)
         return np.arange(five_percent,length,five_percent)
+
 
 
     def find_sample(self):
