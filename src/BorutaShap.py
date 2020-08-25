@@ -29,7 +29,7 @@ class BorutaShap:
     """
 
     def __init__(self, model=None, importance_measure='Shap',
-                classification=True, percentile=100, pvalue=0.05):
+                classification=True, percentile=100, pvalue=0.05, temporal=True):
 
         """
         Parameters
@@ -52,7 +52,11 @@ class BorutaShap:
             A float used as a significance level again if the p-value is increased the algorithm will be more lenient making it smaller
             would make it more strict also by making the model more strict could impact runtime making it slower. As it will be less likley
             to reject and accept features.
-       
+
+        temporal: Boolean
+            if True, then treat dataset as time dependent
+            if False, then each observation is iid and stratify/shuffly enabled on train/test split
+
         """
 
         self.importance_measure = importance_measure.lower()
@@ -61,6 +65,7 @@ class BorutaShap:
         self.classification = classification
         self.model = model
         self.check_model()
+        self.temporal = temporal
         
 
     def check_model(self):
@@ -196,10 +201,15 @@ class BorutaShap:
 
         if self.train_or_test.lower() == 'test':
             # keeping the same naming convenetion as to not add complexit later on
+            if self.temporal:
+                shuffle = False
+            else:
+                shuffle = True
             self.X_boruta_train, self.X_boruta, self.y_train, self.y_test = train_test_split(self.X_boruta,
-                                                                                            self.y,
-                                                                                            test_size=0.3,
-                                                                                            random_state=self.random_state)
+                                                                                             self.y,
+                                                                                             test_size=0.3,
+                                                                                             shuffle=shuffle,
+                                                                                             random_state=self.random_state)
             self.Train_model(self.X_boruta_train, self.y_train)
 
         elif self.train_or_test.lower() == 'train':
