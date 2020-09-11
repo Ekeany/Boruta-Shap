@@ -7,7 +7,7 @@ def readme():
 
 setup(
     name="BorutaShap",
-    version="1.0.12",
+    version="1.0.13",
     description="A feature selection algorithm.",
     long_description=readme(),
     long_description_content_type="text/markdown",
@@ -24,6 +24,6 @@ setup(
     package_dir = {"" : "src"},
     install_requires=["scikit-learn","tqdm",
                       "statsmodels","matplotlib",
-                      "pandas","numpy","shap<=0.34.0,>=0.32.0","seaborn",
+                      "pandas","numpy","shap>=0.34.0","seaborn",
                       "scipy"],
 )
