@@ -175,9 +175,17 @@ class BorutaShap:
 
         X_missing = self.X.isnull().any().any()
         Y_missing = self.missing_values_y()
+        
+        models_to_check = ('xgb', 'catboost', 'lgbm')
 
+        model_name = str(type(self.model)).lower()
         if X_missing or Y_missing:
-            raise ValueError('There are missing values in your Data')
+
+            if model_name.startswith(models_to_check):
+                print('Warning there are missing values in your data !')
+
+            else:
+                raise ValueError('There are missing values in your Data')
         
         else:
             pass
@@ -245,7 +253,7 @@ class BorutaShap:
 
     
  
-    def fit(self, X, y, n_trials = 20, random_state=0, sample=False, train_or_test = 'test'):
+    def fit(self, X, y, n_trials = 20, random_state=0, sample=False, train_or_test = 'test', verbose=True):
 
         """
         The main body of the program this method it computes the following
@@ -298,6 +306,9 @@ class BorutaShap:
         train_or_test: string
             Decides whether the feature improtance should be calculated on out of sample data see the dicussion here.
             https://compstat-lmu.github.io/iml_methods_limitations/pfi-data.html#introduction-to-test-vs.training-data
+
+        verbose: Boolean
+            a flag indicator to print out all the rejected or accepted features.
        
         """
         
@@ -344,10 +355,10 @@ class BorutaShap:
                 self.test_features(iteration=trial+1)
 
         self.store_feature_importance()
-        self.calculate_rejected_accepted_tentative()
+        self.calculate_rejected_accepted_tentative(verbose=verbose)
 
 
-    def calculate_rejected_accepted_tentative(self):
+    def calculate_rejected_accepted_tentative(self, verbose):
 
         """
         Figures out which features have been either accepted rejeected or tentative
@@ -362,9 +373,10 @@ class BorutaShap:
         self.accepted  = list(set(self.flatten_list(self.accepted_columns)))
         self.tentative = list(set(self.all_columns) - set(self.rejected + self.accepted))
 
-        print(str(len(self.accepted))  + ' attributes confirmed important: ' + str(self.accepted))
-        print(str(len(self.rejected))  + ' attributes confirmed unimportant: ' + str(self.rejected))
-        print(str(len(self.tentative)) + ' tentative attributes remains: ' + str(self.tentative))
+        if verbose:
+            print(str(len(self.accepted))  + ' attributes confirmed important: ' + str(self.accepted))
+            print(str(len(self.rejected))  + ' attributes confirmed unimportant: ' + str(self.rejected))
+            print(str(len(self.tentative)) + ' tentative attributes remains: ' + str(self.tentative))
 
 
 
