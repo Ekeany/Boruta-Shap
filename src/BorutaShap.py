@@ -204,7 +204,7 @@ class BorutaShap:
 
         if self.train_or_test.lower() == 'test':
             # keeping the same naming convenetion as to not add complexit later on
-            self.X_boruta_train, self.X_boruta, self.y_train, self.y_test = train_test_split(self.X_boruta,
+            self.X_boruta_train, self.X_boruta_test, self.y_train, self.y_test = train_test_split(self.X_boruta,
                                                                                             self.y,
                                                                                             test_size=0.3,
                                                                                             random_state=self.random_state)
