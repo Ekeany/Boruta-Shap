@@ -49,7 +49,27 @@ X.head()
 Feature_Selector = BorutaShap(importance_measure='shap',
                               classification=False)
 
-Feature_Selector.fit(X=X, y=y, n_trials=100, random_state=0)
+'''
+Sample: Boolean
+	if true then a rowise sample of the data will be used to calculate the feature importance values
+
+sample_fraction: float
+	The sample fraction of the original data used in calculating the feature importance values only
+        used if Sample==True.
+
+train_or_test: string
+	Decides whether the feature improtance should be calculated on out of sample data see the dicussion here.
+        https://compstat-lmu.github.io/iml_methods_limitations/pfi-data.html#introduction-to-test-vs.training-data
+
+normalize: boolean
+            if true the importance values will be normalized using the z-score formula
+
+verbose: Boolean
+	a flag indicator to print out all the rejected or accepted features.
+'''
+Feature_Selector.fit(X=X, y=y, n_trials=100, sample=False,
+            	     train_or_test = 'test', normalize=True,
+		     verbose=True)
 ```
 
 <img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/BostonOutput.PNG?raw=true">
@@ -88,7 +108,9 @@ Feature_Selector = BorutaShap(model=model,
                               importance_measure='shap',
                               classification=True)
 
-Feature_Selector.fit(X=X, y=y, n_trials=100, random_state=0)
+Feature_Selector.fit(X=X, y=y, n_trials=100, sample=False,
+            	     train_or_test = 'test', normalize=True,
+		     verbose=True)
 ```
 <img src="https://github.com/Ekeany/Boruta-Shap/blob/master/images/binaryoutput.PNG?raw=true">
 
