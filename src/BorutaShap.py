@@ -253,7 +253,8 @@ class BorutaShap:
 
     
  
-    def fit(self, X, y, n_trials = 20, random_state=0, sample=False, train_or_test = 'test', verbose=True):
+    def fit(self, X, y, n_trials = 20, random_state=0, sample=False,
+            train_or_test = 'test', normalize=True, verbose=True):
 
         """
         The main body of the program this method it computes the following
@@ -297,7 +298,7 @@ class BorutaShap:
             A random state for reproducibility of results
 
         Sample: Boolean
-            if true then the a rowise sample of the data will be used to calculate the feature importance values
+            if true then a rowise sample of the data will be used to calculate the feature importance values
 
         sample_fraction: float
             The sample fraction of the original data used in calculating the feature importance values only
@@ -306,6 +307,9 @@ class BorutaShap:
         train_or_test: string
             Decides whether the feature improtance should be calculated on out of sample data see the dicussion here.
             https://compstat-lmu.github.io/iml_methods_limitations/pfi-data.html#introduction-to-test-vs.training-data
+
+        normalize: boolean
+            if true the importance values will be normalized using the z-score formula
 
         verbose: Boolean
             a flag indicator to print out all the rejected or accepted features.
@@ -349,7 +353,7 @@ class BorutaShap:
 
                 self.Check_if_chose_train_or_test_and_train_model()
 
-                self.X_feature_import, self.Shadow_feature_import = self.feature_importance()
+                self.X_feature_import, self.Shadow_feature_import = self.feature_importance(normalize=normalize)
                 self.update_importance_history()
                 self.hits += self.calculate_hits()
                 self.test_features(iteration=trial+1)
@@ -559,7 +563,7 @@ class BorutaShap:
         return [(element-mean_value)/std_value for element in array]
 
 
-    def feature_importance(self):
+    def feature_importance(self, normalize):
 
         """
         Caculates the feature importances scores of the model
@@ -567,7 +571,10 @@ class BorutaShap:
         Parameters
         ----------
         importance_measure: string
-            allows the user to choose either the Shap or Gini importance metrics 
+            allows the user to choose either the Shap or Gini importance metrics
+
+        normalize: boolean
+            if true the importance values will be normalized using the z-score formula
 
         Returns:
             array of normalized feature importance scores for both the shadow and original features.
@@ -582,20 +589,28 @@ class BorutaShap:
 
             self.explain()
             vals = self.shap_values
-            vals = self.calculate_Zscore(vals)
+
+            if normalize:
+                vals = self.calculate_Zscore(vals)
 
             X_feature_import = vals[:len(self.X.columns)]
             Shadow_feature_import = vals[len(self.X_shadow.columns):]
 
+
         elif self.importance_measure == 'gini':
             
-                feature_importances_ = self.calculate_Zscore(np.abs(self.model.feature_importances_))
+                feature_importances_ =  np.abs(self.model.feature_importances_)
+                
+                if normalize:
+                    feature_importances_ = self.calculate_Zscore(feature_importances_)
+
                 X_feature_import = feature_importances_[:len(self.X.columns)]
                 Shadow_feature_import = feature_importances_[len(self.X.columns):]
 
         else:
 
             raise ValueError('No Importance_measure was specified select one of (shap, gini)')
+
 
         return X_feature_import, Shadow_feature_import
 
