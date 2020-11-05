@@ -1,3 +1,4 @@
+[![DOI](https://zenodo.org/badge/255354538.svg)](https://zenodo.org/badge/latestdoi/255354538)
 <a href="https://badge.fury.io/py/BorutaShap"><img src="https://badge.fury.io/py/BorutaShap.svg" alt="PyPI version" height="18"></a>
 
 # Boruta-Shap
