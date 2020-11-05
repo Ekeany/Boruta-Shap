@@ -132,4 +132,5 @@ subset = Feature_Selector.Subset()
 Pull requests are welcome. For major changes, please open an issue first to discuss what you would like to change.
 
 ## License
+If you wish to cite this work please click on the zenodo badge at the top of this READme file
 [MIT](https://choosealicense.com/licenses/mit/)
