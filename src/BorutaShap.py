@@ -539,12 +539,14 @@ class BorutaShap:
             Datframe with random permutations of the original columns.
         """
         self.X_shadow = self.X.apply(np.random.permutation)
-        # append
-        obj_col = self.X_shadow.select_dtypes("object").columns.tolist()
-        if obj_col ==[] :
-             pass
-        else :
-             self.X_shadow[obj_col] =self.X_shadow[obj_col].astype("category")
+        
+        if isinstance(self.X_shadow, pd.DataFrame):
+            # append
+            obj_col = self.X_shadow.select_dtypes("object").columns.tolist()
+            if obj_col ==[] :
+                 pass
+            else :
+                 self.X_shadow[obj_col] =self.X_shadow[obj_col].astype("category")
 
         self.X_shadow.columns = ['shadow_' + feature for feature in self.X.columns]
         self.X_boruta = pd.concat([self.X, self.X_shadow], axis = 1)
