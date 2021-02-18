@@ -176,7 +176,7 @@ class BorutaShap:
         X_missing = self.X.isnull().any().any()
         Y_missing = self.missing_values_y()
 
-        models_to_check = ('xgb', 'catboost', 'lgbm')
+        models_to_check = ('xgb', 'catboost', 'lgbm', 'lightgbm')
 
         model_name = str(type(self.model)).lower()
         if X_missing or Y_missing:
