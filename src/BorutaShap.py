@@ -7,7 +7,7 @@ from sklearn.cluster import KMeans
 from scipy.sparse import issparse
 from scipy.stats import binom_test, ks_2samp
 import matplotlib.pyplot as plt
-from tqdm import tqdm
+from tqdm.auto import tqdm
 import random
 import pandas as pd
 import numpy as np
@@ -355,7 +355,9 @@ class BorutaShap:
 
                 self.X_feature_import, self.Shadow_feature_import = self.feature_importance(normalize=normalize)
                 self.update_importance_history()
-                self.hits += self.calculate_hits()
+                hits = self.calculate_hits()
+                self.hits += hits
+                self.history_hits = np.vstack((self.history_hits, self.hits))
                 self.test_features(iteration=trial+1)
 
         self.store_feature_importance()
@@ -397,6 +399,7 @@ class BorutaShap:
 
         self.history_shadow = np.zeros(self.ncols)
         self.history_x = np.zeros(self.ncols)
+        self.history_hits = np.zeros(self.ncols)
 
 
     def update_importance_history(self):
@@ -443,7 +446,6 @@ class BorutaShap:
         self.history_x['Min_Shadow']    =  [min(i) for i in self.history_shadow]
         self.history_x['Mean_Shadow']   =  [np.nanmean(i) for i in self.history_shadow]
         self.history_x['Median_Shadow'] =  [np.nanmedian(i) for i in self.history_shadow]
-        self.history_x.dropna(axis=0,inplace=True)
 
 
     def results_to_csv(self, filename='feature_importance'):
