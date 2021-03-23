@@ -181,7 +181,7 @@ class BorutaShap:
         model_name = str(type(self.model)).lower()
         if X_missing or Y_missing:
 
-            if model_name.startswith(models_to_check):
+            if any([x in model_name for x in models_to_check]):
                 print('Warning there are missing values in your data !')
 
             else:
