@@ -207,7 +207,8 @@ class BorutaShap:
             self.X_boruta_train, self.X_boruta_test, self.y_train, self.y_test = train_test_split(self.X_boruta,
                                                                                             self.y,
                                                                                             test_size=0.3,
-                                                                                            random_state=self.random_state)
+                                                                                            random_state=self.random_state,
+                                                                                            stratify=self.stratify)
             self.Train_model(self.X_boruta_train, self.y_train)
 
         elif self.train_or_test.lower() == 'train':
@@ -254,7 +255,7 @@ class BorutaShap:
 
 
     def fit(self, X, y, n_trials = 20, random_state=0, sample=False,
-            train_or_test = 'test', normalize=True, verbose=True):
+            train_or_test = 'test', normalize=True, verbose=True, stratify=None):
 
         """
         The main body of the program this method it computes the following
@@ -314,6 +315,9 @@ class BorutaShap:
         verbose: Boolean
             a flag indicator to print out all the rejected or accepted features.
 
+        stratify: array
+            allows the train test splits to be stratified based on given values.
+
         """
 
         np.random.seed(random_state)
@@ -331,6 +335,7 @@ class BorutaShap:
         self.check_missing_values()
         self.sample = sample
         self.train_or_test = train_or_test
+        self.stratify = stratify
 
         self.features_to_remove = []
         self.hits  = np.zeros(self.ncols)
