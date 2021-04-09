@@ -191,7 +191,6 @@ class BorutaShap:
             pass
 
 
-
     def Check_if_chose_train_or_test_and_train_model(self):
 
         """
@@ -201,6 +200,9 @@ class BorutaShap:
         https://compstat-lmu.github.io/iml_methods_limitations/pfi-data.html#introduction-to-test-vs.training-data
 
         """
+        if self.stratify is not None and not self.classification:
+            raise ValueError('Cannot take a strtified sample from continuos variable please bucket the variable and try again !')
+
 
         if self.train_or_test.lower() == 'test':
             # keeping the same naming convenetion as to not add complexit later on
