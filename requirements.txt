@@ -167,7 +167,7 @@ python-jsonrpc-server==0.3.4
 python-language-server==0.31.7
 pytz==2019.3
 PyWavelets==1.1.1
-pywin32==227
+pywin32==301
 pywin32-ctypes==0.2.0
 pywinpty==0.5.7
 PyYAML==5.3
