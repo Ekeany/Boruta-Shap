@@ -682,6 +682,8 @@ class BorutaShap:
             sample = np.take(self.preds, sample_indices)
             if ks_2samp(self.preds, sample).pvalue > 0.95:
                 break
+            
+            iteration+=1
 
             if iteration == 20:
                 element  += 1
