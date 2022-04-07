@@ -147,14 +147,14 @@ class BorutaShap:
 
         """
 
-        if isinstance(self.y, pd.Series):
+        if isinstance(self.y, pd.Series) or isinstance(self.y, pd.DataFrame):
             return self.y.isnull().any().any()
 
         elif isinstance(self.y, np.ndarray):
             return np.isnan(self.y).any()
 
         else:
-            raise AttributeError('Y must be a pandas Dataframe or a numpy array')
+            raise AttributeError('Y must be a pandas Dataframe, Series, or a numpy array')
 
 
     def check_missing_values(self):
