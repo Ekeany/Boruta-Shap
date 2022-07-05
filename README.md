@@ -60,7 +60,7 @@ sample_fraction: float
 
 train_or_test: string
 	Decides whether the feature improtance should be calculated on out of sample data see the dicussion here.
-        https://compstat-lmu.github.io/iml_methods_limitations/pfi-data.html#introduction-to-test-vs.training-data
+        https://slds-lmu.github.io/iml_methods_limitations/pfi-data.html
 
 normalize: boolean
             if true the importance values will be normalized using the z-score formula
