@@ -4,6 +4,7 @@ from statsmodels.stats.multitest import multipletests
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.cluster import KMeans
+from sklearn.inspection import permutation_importance
 from scipy.sparse import issparse
 from scipy.stats import binom_test, ks_2samp
 import matplotlib.pyplot as plt
@@ -623,7 +624,18 @@ class BorutaShap:
 
             X_feature_import = vals[:len(self.X.columns)]
             Shadow_feature_import = vals[len(self.X_shadow.columns):]
+            
+        elif self.importance_measure == 'perm':
+            
+            # set default scoring as f1, can be changed to an argument for customizability
+            perm_importances_ =  permutation_importance(self.model, self.X, self.y, scoring='f1')
+            perm_importances_ = perm_importance.importances_mean
 
+            if normalize:
+                perm_importances_ = self.calculate_Zscore(perm_importances_)
+
+            X_feature_import = perm_importances_[:len(self.X.columns)]
+            Shadow_feature_import = perm_importances_[len(self.X.columns):]
 
         elif self.importance_measure == 'gini':
 
@@ -637,7 +649,7 @@ class BorutaShap:
 
         else:
 
-            raise ValueError('No Importance_measure was specified select one of (shap, gini)')
+            raise ValueError('No Importance_measure was specified select one of (shap, perm, gini)')
 
 
         return X_feature_import, Shadow_feature_import
