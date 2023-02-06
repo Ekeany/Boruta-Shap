@@ -380,7 +380,9 @@ class BorutaShap:
         self.store_feature_importance()
         self.calculate_rejected_accepted_tentative(verbose=verbose)
 
-
+    def transform(self, X):
+        return self.Subset(self)
+        
     def calculate_rejected_accepted_tentative(self, verbose):
 
         """
