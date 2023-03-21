@@ -1,5 +1,5 @@
 from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, IsolationForest
-from sklearn.datasets import load_breast_cancer, load_boston
+from sklearn.datasets import load_breast_cancer, load_diabetes
 from statsmodels.stats.multitest import multipletests
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import MinMaxScaler
@@ -1051,8 +1051,8 @@ def load_data(data_type='classification'):
         y = X.pop('target')
 
     elif data_type == 'regression':
-        boston = load_boston()
-        X = pd.DataFrame(np.c_[boston['data'], boston['target']], columns = np.append(boston['feature_names'], ['target']))
+        diabetes = load_diabetes()
+        X = pd.DataFrame(np.c_[diabetes['data'], diabetes['target']], columns = np.append(diabetes['feature_names'], ['target']))
         y = X.pop('target')
 
     else:
