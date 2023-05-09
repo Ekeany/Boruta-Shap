@@ -197,7 +197,7 @@ class BorutaShap:
         Decides to fit the model to either the training data or the test/unseen data a great discussion on the
         differences can be found here.
 
-        https://compstat-lmu.github.io/iml_methods_limitations/pfi-data.html#introduction-to-test-vs.training-data
+        https://slds-lmu.github.io/iml_methods_limitations/pfi-data.html
 
         """
         if self.stratify is not None and not self.classification:
