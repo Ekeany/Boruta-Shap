@@ -19,7 +19,7 @@ jobs:
 #        run: python -m flake8 src
   test:
     name: Run Tests
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     strategy:
       matrix:
         python: [3.6, 3.7, 3.8]
