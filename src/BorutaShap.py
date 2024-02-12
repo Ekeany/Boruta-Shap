@@ -300,13 +300,23 @@ class BorutaShap:
 
 
         if self.train_or_test.lower() == 'test':
-            # keeping the same naming convenetion as to not add complexit later on
-            self.X_boruta_train, self.X_boruta_test, self.y_train, self.y_test, self.w_train, self.w_test = train_test_split(self.X_boruta,
+            # keeping the same naming convenetion as to not add complexit later on 
+            if self.stratify==None:
+                self.X_boruta_train, self.X_boruta_test, self.y_train, self.y_test, self.w_train, self.w_test = train_test_split(self.X_boruta,
                                                                                                                                 self.y,
                                                                                                                                 self.sample_weight,
-                                                                                                                                test_size=0.3,
+                                                                                                                                test_size=self.test_size,
                                                                                                                                 random_state=self.random_state,
-                                                                                                                                stratify=self.stratify)
+                                                                                                                                shuffle=self.shuffle
+                                                                                                                                )
+            else:                                                                                            
+                self.X_boruta_train, self.X_boruta_test, self.y_train, self.y_test, self.w_train, self.w_test = train_test_split(self.X_boruta,
+                                                                                                                                self.y,
+                                                                                                                                self.sample_weight,
+                                                                                                                                test_size=self.test_size,
+                                                                                                                                random_state=self.random_state,
+                                                                                                                                stratify=self.stratify,
+                                                                                                                                shuffle=self.shuffle)
             self.Train_model(self.X_boruta_train, self.y_train, sample_weight = self.w_train)
 
         elif self.train_or_test.lower() == 'train':
@@ -356,7 +366,7 @@ class BorutaShap:
 
 
     def fit(self, X, y, sample_weight = None, n_trials = 20, random_state=0, sample=False,
-            train_or_test = 'test', normalize=True, verbose=True, stratify=None):
+            train_or_test = 'test', normalize=True, verbose=True, stratify=None, shuffle=True, test_size=0.3):
 
         """
         The main body of the program this method it computes the following
@@ -422,6 +432,12 @@ class BorutaShap:
         stratify: array
             allows the train test splits to be stratified based on given values.
 
+        shuffle: Boolean
+            Changes behaviour of train_test_split in Check_if_chose_train_or_test_and_train_model (might be useful for time series).
+
+        test_size: float
+            regulates the test size when using 'test' option in Check_if_chose_train_or_test_and_train_model .
+
         """
 
         if sample_weight is None:
@@ -430,6 +446,8 @@ class BorutaShap:
         self.starting_X = X.copy()
         self.X = X.copy()
         self.y = y.copy()
+        self.shuffle=shuffle
+        self.test_size=test_size
         self.sample_weight = sample_weight.copy()
         self.n_trials = n_trials
         self.random_state = random_state
